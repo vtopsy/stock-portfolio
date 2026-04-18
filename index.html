@@ -578,6 +578,13 @@ const fmt=u=>baseCurrency+' '+toBase(u).toLocaleString(undefined,{minimumFractio
 const geoMap={SGX:'SG',NYSE:'US',NASDAQ:'US',USX:'US',LSE:'GB',HKEX:'HK',TSE:'JP',ASX:'AU',XETRA:'EU',MYX:'MY'};
 const today=()=>new Date().toISOString().split('T')[0];
 
+// ===================== HELPERS =====================
+function totalDivReceivedUSD(ticker){
+  return dividends
+    .filter(function(d){return !ticker||d.ticker===ticker;})
+    .reduce(function(s,d){return s+d.amount;},0);
+}
+
 // ===================== HOLDINGS =====================
 function buildHoldings(){
   const map={};

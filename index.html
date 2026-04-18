@@ -60,7 +60,6 @@ main{flex:1;padding:16px;max-width:1600px;width:100%;margin:0 auto}
 .badge-green{background:#00c89620;color:var(--green)}.badge-red{background:#ff5c7a20;color:var(--red)}
 .badge-amber{background:#ffb34720;color:var(--amber)}.badge-purple{background:#6c63ff20;color:var(--accent)}
 .badge-cyan{background:#00d2ff20;color:var(--accent2)}.badge-teal{background:#20e3b220;color:var(--teal)}
-.badge-div{background:#ff6eb420;color:var(--pink)}.badge-blue{background:#00d2ff20;color:var(--accent2)}
 .chart-wrap{position:relative;width:100%}
 .h220{height:220px}.h260{height:260px}
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:200;align-items:flex-start;justify-content:center;padding-top:36px;overflow-y:auto}
@@ -71,10 +70,10 @@ main{flex:1;padding:16px;max-width:1600px;width:100%;margin:0 auto}
 .fg label{display:block;font-size:var(--fs-xs);color:var(--text2);margin-bottom:4px;font-weight:500}
 .fg input,.fg select,.fg textarea{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--rsm);padding:9px 11px;font-size:var(--fs-sm);outline:none;font-family:inherit;transition:border-color .15s}
 .fg input:focus,.fg select:focus{border-color:var(--accent)}
-.fg .hint{font-size:var(--fs-xs);color:var(--text3);margin-top:3px;cursor:pointer}
+.fg .hint{font-size:var(--fs-xs);color:var(--accent);margin-top:3px;cursor:pointer}
 .fr{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .fr3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-.action-row{display:flex;gap:0;margin-bottom:13px;border-radius:var(--rsm);overflow:hidden;border:1px solid var(--border)}
+.action-row{display:flex;margin-bottom:13px;border-radius:var(--rsm);overflow:hidden;border:1px solid var(--border)}
 .action-btn{flex:1;padding:10px;text-align:center;cursor:pointer;font-size:var(--fs-sm);font-weight:600;background:var(--bg3);color:var(--text2);border:none;font-family:inherit;transition:all .15s}
 .action-btn.buy.active{background:#00c89622;color:var(--green)}
 .action-btn.sell.active{background:#ff5c7a22;color:var(--red)}
@@ -89,7 +88,7 @@ main{flex:1;padding:16px;max-width:1600px;width:100%;margin:0 auto}
 .pill-tabs{display:flex;gap:5px;flex-wrap:wrap}
 .pill{padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:var(--fs-sm);font-family:inherit;transition:all .15s}
 .pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
-.pos-neg-tab{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--rsm);overflow:hidden;margin-bottom:13px;width:fit-content}
+.pos-neg-tab{display:flex;border:1px solid var(--border);border-radius:var(--rsm);overflow:hidden;width:fit-content;margin-bottom:13px}
 .pos-neg-tab button{padding:8px 18px;background:var(--bg3);color:var(--text2);border:none;cursor:pointer;font-size:var(--fs-sm);font-family:inherit;font-weight:500;transition:all .15s}
 .pos-neg-tab button.active{background:var(--accent);color:#fff}
 .toast{display:none;position:fixed;top:60px;right:14px;padding:10px 16px;border-radius:var(--rsm);font-size:var(--fs-sm);font-weight:600;z-index:400;max-width:320px;border:1px solid}
@@ -102,6 +101,7 @@ main{flex:1;padding:16px;max-width:1600px;width:100%;margin:0 auto}
 .cal-day.upcoming{background:#00c89618;border:1px solid #00c89640}
 .setup-box{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:15px;margin-bottom:13px}
 .setup-box h4{font-size:var(--fs-sm);font-weight:600;margin-bottom:7px;color:var(--amber)}
+.setup-box p{font-size:var(--fs-sm);color:var(--text2);line-height:1.6;margin-bottom:9px}
 .tab-row{display:flex;border-bottom:1px solid var(--border);margin-bottom:10px}
 .tab-btn{padding:7px 13px;background:none;border:none;color:var(--text2);cursor:pointer;font-size:var(--fs-sm);border-bottom:2px solid transparent;font-family:inherit}
 .tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
@@ -140,8 +140,8 @@ input[type=file]{display:none}
     <button class="nav-tab" onclick="showPage('settings',this)">Settings</button>
   </div>
   <div class="nav-right">
-    <span id="syncStatus" style="font-size:11px;color:var(--text3)">⬤ Local</span>
-    <button class="btn btn-ghost" onclick="refreshPrices()">↻ Prices</button>
+    <span id="syncStatus" style="font-size:11px;color:var(--text3)">&#9899; Local</span>
+    <button class="btn btn-ghost" onclick="refreshPrices()">&#8635; Prices</button>
     <button class="btn btn-primary" onclick="openAddTx()">+ Transaction</button>
   </div>
 </nav>
@@ -188,6 +188,9 @@ input[type=file]{display:none}
 
 <!-- HOLDINGS -->
 <div id="holdings" class="page">
+  <div class="card" id="holdingsSummaryCard">
+    <div id="holdingsSummaryTable"></div>
+  </div>
   <div class="card">
     <div class="summary-row" id="holdingSummaryRow"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
@@ -196,8 +199,8 @@ input[type=file]{display:none}
         <button onclick="setHoldingView('closed',this)">Closed Positions</button>
       </div>
       <div style="display:flex;gap:7px;align-items:center">
-        <input id="searchHoldings" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--rsm);padding:7px 11px;font-size:var(--fs-sm);width:180px;outline:none" placeholder="Filter symbol or name…" oninput="renderHoldings()"/>
-        <button class="btn btn-ghost btn-sm" onclick="exportCSV()">↓ Export</button>
+        <input id="searchHoldings" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--rsm);padding:7px 11px;font-size:var(--fs-sm);width:180px;outline:none" placeholder="Filter symbol or name..." oninput="renderHoldings()"/>
+        <button class="btn btn-ghost btn-sm" onclick="exportCSV()">&#8595; Export</button>
       </div>
     </div>
     <div id="holdingsContent"></div>
@@ -210,19 +213,19 @@ input[type=file]{display:none}
     <div class="card-header">
       <span class="card-title">Transactions <span id="txCount" style="color:var(--text3);font-weight:400;font-size:11px"></span></span>
       <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
-        <input id="txSearch" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--rsm);padding:7px 11px;font-size:var(--fs-sm);width:150px;outline:none" placeholder="Search symbol…" oninput="renderTransactions()"/>
+        <input id="txSearch" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--rsm);padding:7px 11px;font-size:var(--fs-sm);width:150px;outline:none" placeholder="Search symbol..." oninput="renderTransactions()"/>
         <select id="txFilterAction" onchange="renderTransactions()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--rsm);padding:7px 9px;font-size:var(--fs-sm);outline:none">
           <option value="">All Actions</option><option>Buy</option><option>Sell</option><option>Fee</option>
         </select>
         <button class="btn btn-primary" onclick="openAddTx()">+ Add</button>
-        <button class="btn btn-ghost" onclick="exportTxCSV()">↓ Export</button>
-        <label class="btn btn-ghost" style="cursor:pointer" for="csvImportTx">↑ Import</label>
+        <button class="btn btn-ghost" onclick="exportTxCSV()">&#8595; Export</button>
+        <label class="btn btn-ghost" style="cursor:pointer" for="csvImportTx">&#8593; Import</label>
         <input type="file" id="csvImportTx" accept=".csv" onchange="importCSV(event)"/>
       </div>
     </div>
     <div class="tbl-wrap">
       <table class="tbl">
-        <thead><tr><th>Exchange</th><th>Symbol</th><th>Name</th><th>Action</th><th>Date</th><th>Cur</th><th class="r">Shares</th><th class="r">Price</th><th class="r">Fees</th><th class="r">Total</th><th>Notes</th><th class="c">⚙</th></tr></thead>
+        <thead><tr><th>Exchange</th><th>Symbol</th><th>Name</th><th>Action</th><th>Date</th><th>Cur</th><th class="r">Shares</th><th class="r">Price</th><th class="r">Fees</th><th class="r">Total</th><th>Notes</th><th class="c">Actions</th></tr></thead>
         <tbody id="txBody"></tbody>
       </table>
     </div>
@@ -238,7 +241,7 @@ input[type=file]{display:none}
       <span class="card-title">Cash Balances</span>
       <div style="display:flex;gap:7px">
         <button class="btn btn-primary" onclick="openAddCashTx()">+ Cash Transaction</button>
-        <label class="btn btn-ghost" style="cursor:pointer" for="csvImportCash">↑ Import CSV</label>
+        <label class="btn btn-ghost" style="cursor:pointer" for="csvImportCash">&#8593; Import CSV</label>
         <input type="file" id="csvImportCash" accept=".csv" onchange="importCashCSV(event)"/>
       </div>
     </div>
@@ -254,12 +257,12 @@ input[type=file]{display:none}
           <option>DEPOSIT</option><option>WITHDRAWAL</option><option>EXCHANGE</option>
           <option>DIVIDEND</option><option>BUY</option><option>SELL</option>
         </select>
-        <button class="btn btn-ghost btn-sm" onclick="exportCashCSV()">↓ Export</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportCashCSV()">&#8595; Export</button>
       </div>
     </div>
     <div class="tbl-wrap">
       <table class="tbl">
-        <thead><tr><th>Type</th><th>Date</th><th class="r">Amount</th><th>Details</th><th>Symbol</th><th>Stock Name</th><th>Portfolio</th><th class="c">⚙</th></tr></thead>
+        <thead><tr><th>Type</th><th>Date</th><th class="r">Amount</th><th>Details</th><th>Symbol</th><th>Stock Name</th><th>Portfolio</th><th class="c">Actions</th></tr></thead>
         <tbody id="cashTxBody"></tbody>
       </table>
     </div>
@@ -340,31 +343,34 @@ input[type=file]{display:none}
   <div class="grid-2">
     <div>
       <div class="setup-box">
-        <h4>💱 Display Currency</h4>
+        <h4>Display Currency</h4>
         <div class="fg"><label>Base Currency</label>
           <select id="baseCurrencySel" onchange="saveBaseCurrency()">
-            <option value="SGD">SGD – Singapore Dollar</option><option value="USD">USD – US Dollar</option>
-            <option value="HKD">HKD – Hong Kong Dollar</option><option value="GBP">GBP – British Pound</option>
-            <option value="EUR">EUR – Euro</option><option value="JPY">JPY – Japanese Yen</option>
+            <option value="SGD">SGD - Singapore Dollar</option>
+            <option value="USD">USD - US Dollar</option>
+            <option value="HKD">HKD - Hong Kong Dollar</option>
+            <option value="GBP">GBP - British Pound</option>
+            <option value="EUR">EUR - Euro</option>
+            <option value="JPY">JPY - Japanese Yen</option>
           </select>
         </div>
         <div style="font-size:var(--fs-xs);color:var(--text3)">Approx FX to USD: SGD 1.35 · HKD 7.82 · GBP 0.79 · EUR 0.92 · JPY 151.2</div>
       </div>
       <div class="setup-box">
-        <h4>📈 Yahoo Finance (corsproxy.io)</h4>
-        <p style="font-size:var(--fs-sm);color:var(--text2);line-height:1.6;margin-bottom:9px">Prices fetched via <code style="background:var(--bg4);padding:1px 5px;border-radius:3px">corsproxy.io</code> — works on GitHub Pages with no API key.</p>
-        <button class="btn btn-primary btn-sm" onclick="refreshPrices()">↻ Refresh Prices Now</button>
+        <h4>Yahoo Finance (via corsproxy.io)</h4>
+        <p>Prices fetched via corsproxy.io — works on GitHub Pages with no API key needed.</p>
+        <button class="btn btn-primary btn-sm" onclick="refreshPrices()">Refresh Prices Now</button>
         <div id="yhStatus" style="font-size:var(--fs-xs);margin-top:6px;color:var(--text3)"></div>
       </div>
       <div class="setup-box">
-        <h4>🔥 Firebase</h4>
+        <h4>Firebase</h4>
         <div class="tab-row">
           <button class="tab-btn active" onclick="settingsTab('fbConfig',this)">Config</button>
           <button class="tab-btn" onclick="settingsTab('fbGuide',this)">Setup guide</button>
         </div>
         <div id="fbConfig">
-          <div class="fg"><label>API Key</label><input id="fbApiKey" placeholder="AIza…" oninput="saveFirebaseConfig()"/></div>
-          <div class="fg"><label>Database URL</label><input id="fbDbUrl" placeholder="https://…firebaseio.com" oninput="saveFirebaseConfig()"/></div>
+          <div class="fg"><label>API Key</label><input id="fbApiKey" placeholder="AIza..." oninput="saveFirebaseConfig()"/></div>
+          <div class="fg"><label>Database URL</label><input id="fbDbUrl" placeholder="https://...firebaseio.com" oninput="saveFirebaseConfig()"/></div>
           <div style="display:flex;gap:7px;margin-top:5px">
             <button class="btn btn-primary btn-sm" onclick="loadFromFirebase()">Load</button>
             <button class="btn btn-ghost btn-sm" onclick="saveToFirebase()">Save</button>
@@ -372,14 +378,14 @@ input[type=file]{display:none}
           <div id="fbStatus" style="font-size:var(--fs-xs);margin-top:6px;color:var(--text3)">Not connected</div>
         </div>
         <div id="fbGuide" style="display:none;font-size:var(--fs-sm);color:var(--text2);line-height:1.9">
-          1. Go to <b style="color:var(--text)">console.firebase.google.com</b><br>
-          2. Create project → Add Web App → copy config<br>
-          3. Enable Realtime Database → set rules:<br>
-          <code style="background:var(--bg4);padding:2px 7px;border-radius:3px;display:block;margin-top:4px;font-size:var(--fs-xs)">{"rules":{".read":true,".write":true}}</code>
+          1. Go to console.firebase.google.com<br>
+          2. Create project, Add Web App, copy config<br>
+          3. Enable Realtime Database, set rules:<br>
+          <code style="background:var(--bg4);padding:2px 7px;border-radius:3px;display:block;margin-top:4px">{"rules":{".read":true,".write":true}}</code>
         </div>
       </div>
       <div class="setup-box">
-        <h4>📧 EmailJS Digest</h4>
+        <h4>EmailJS Digest</h4>
         <div class="fg"><label>Public Key</label><input id="ejPublicKey" oninput="saveEmailConfig()"/></div>
         <div class="fg"><label>Service ID</label><input id="ejServiceId" oninput="saveEmailConfig()"/></div>
         <div class="fg"><label>Template ID</label><input id="ejTemplateId" oninput="saveEmailConfig()"/></div>
@@ -398,29 +404,29 @@ input[type=file]{display:none}
           <code style="background:var(--bg3);padding:5px 9px;border-radius:4px;display:block;margin:5px 0;font-size:var(--fs-xs);line-height:1.9">Type · Date(YYYY-MM-DD) · Currency · Amount<br>Details · Symbol · StockName · Portfolio</code>
         </div>
         <div style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap">
-          <button class="btn btn-ghost btn-sm" onclick="exportTxCSV()">↓ Transactions</button>
-          <button class="btn btn-ghost btn-sm" onclick="exportCSV()">↓ Holdings</button>
-          <button class="btn btn-ghost btn-sm" onclick="exportCashCSV()">↓ Cash</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportTxCSV()">&#8595; Transactions</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportCSV()">&#8595; Holdings</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportCashCSV()">&#8595; Cash</button>
         </div>
       </div>
       <div class="card">
         <div class="card-header"><span class="card-title">Data Management</span></div>
         <div style="font-size:var(--fs-sm);color:var(--text2);margin-bottom:11px">Clear all local data. Cannot be undone.</div>
-        <button class="btn btn-danger" onclick="clearAllData()">🗑 Clear All Data</button>
+        <button class="btn btn-danger" onclick="clearAllData()">Clear All Data</button>
       </div>
     </div>
   </div>
 </div>
 </main>
 
-<!-- ADD TRANSACTION MODAL -->
+<!-- MODALS -->
 <div class="modal-bg" id="addTxModal">
   <div class="modal">
     <h3>Add Transaction</h3>
     <div class="action-row" id="actionRow">
-      <button class="action-btn buy active" onclick="setAction('Buy',this)">● Buy</button>
-      <button class="action-btn sell" onclick="setAction('Sell',this)">● Sell</button>
-      <button class="action-btn fee" onclick="setAction('Fee',this)">● Fees</button>
+      <button class="action-btn buy active" onclick="setAction('Buy',this)">Buy</button>
+      <button class="action-btn sell" onclick="setAction('Sell',this)">Sell</button>
+      <button class="action-btn fee" onclick="setAction('Fee',this)">Fees</button>
     </div>
     <div class="check-row">
       <label class="check-item"><input type="checkbox" id="chkCash" checked/> Add to Cash Transactions</label>
@@ -432,14 +438,14 @@ input[type=file]{display:none}
     </div>
     <div class="fr">
       <div class="fg"><label>Date</label><input id="txDate" type="date"/>
-        <div class="hint" onclick="document.getElementById('txDate').value=today()" style="color:var(--accent)">Set as today's date</div>
+        <div class="hint" onclick="document.getElementById('txDate').value=today()">Set as today's date</div>
       </div>
-      <div class="fg"><label>Portfolio / Exchange</label>
+      <div class="fg"><label>Exchange</label>
         <select id="txExchange"><option>SGX</option><option>NYSE</option><option>NASDAQ</option><option>HKEX</option><option>LSE</option><option>TSE</option><option>ASX</option><option>XETRA</option></select>
       </div>
     </div>
     <div class="fr3">
-      <div class="fg"><label>Number of Shares</label><input id="txShares" type="number" placeholder="100" step="any" oninput="calcTotal()"/></div>
+      <div class="fg"><label>Shares</label><input id="txShares" type="number" placeholder="100" step="any" oninput="calcTotal()"/></div>
       <div class="fg"><label>Price Per Share</label><input id="txPrice" type="number" placeholder="2.50" step="any" oninput="calcTotal()"/></div>
       <div class="fg"><label>Currency</label>
         <select id="txCurrency" onchange="calcTotal()"><option>SGD</option><option>USD</option><option>HKD</option><option>GBP</option><option>EUR</option><option>JPY</option></select>
@@ -449,7 +455,7 @@ input[type=file]{display:none}
       <div class="fg"><label>Fees (optional)</label><input id="txFees" type="number" placeholder="0" step="any" oninput="calcTotal()"/></div>
       <div class="fg"><label>Total (after fees)</label><input id="txTotal" type="number" placeholder="auto-calculated" step="any"/></div>
     </div>
-    <div class="fg"><label>Notes (optional)</label><input id="txNotes" placeholder="Broker reference, notes…"/></div>
+    <div class="fg"><label>Notes (optional)</label><input id="txNotes" placeholder="Broker reference..."/></div>
     <div style="display:flex;gap:8px;margin-top:5px">
       <button class="btn btn-primary" onclick="addTransaction()" style="flex:1">Add</button>
       <button class="btn btn-ghost" onclick="closeModal('addTxModal')">Cancel</button>
@@ -457,15 +463,14 @@ input[type=file]{display:none}
   </div>
 </div>
 
-<!-- EDIT TRANSACTION MODAL -->
 <div class="modal-bg" id="editTxModal">
   <div class="modal">
     <h3>Edit Transaction</h3>
     <input type="hidden" id="editTxIdx"/>
     <div class="action-row" id="editActionRow">
-      <button class="action-btn buy active" onclick="setEditAction('Buy',this)">● Buy</button>
-      <button class="action-btn sell" onclick="setEditAction('Sell',this)">● Sell</button>
-      <button class="action-btn fee" onclick="setEditAction('Fee',this)">● Fees</button>
+      <button class="action-btn buy active" onclick="setEditAction('Buy',this)">Buy</button>
+      <button class="action-btn sell" onclick="setEditAction('Sell',this)">Sell</button>
+      <button class="action-btn fee" onclick="setEditAction('Fee',this)">Fees</button>
     </div>
     <div class="fr"><div class="fg"><label>Symbol</label><input id="eTicker"/></div><div class="fg"><label>Name</label><input id="eName"/></div></div>
     <div class="fr"><div class="fg"><label>Date</label><input id="eDate" type="date"/></div><div class="fg"><label>Exchange</label><select id="eExchange"><option>SGX</option><option>NYSE</option><option>NASDAQ</option><option>HKEX</option><option>LSE</option><option>TSE</option><option>ASX</option><option>XETRA</option></select></div></div>
@@ -479,7 +484,6 @@ input[type=file]{display:none}
   </div>
 </div>
 
-<!-- ADD CASH TRANSACTION MODAL -->
 <div class="modal-bg" id="addCashTxModal">
   <div class="modal">
     <h3>Add Cash Transaction</h3>
@@ -491,7 +495,7 @@ input[type=file]{display:none}
     </div>
     <div class="fr">
       <div class="fg"><label>Date</label><input id="ctDate" type="date"/>
-        <div class="hint" onclick="document.getElementById('ctDate').value=today()" style="color:var(--accent)">Set as today's date</div>
+        <div class="hint" onclick="document.getElementById('ctDate').value=today()">Set as today's date</div>
       </div>
       <div class="fg"><label>Currency</label>
         <select id="ctCurrency"><option>SGD</option><option>USD</option><option>HKD</option><option>GBP</option><option>EUR</option><option>JPY</option></select>
@@ -500,14 +504,14 @@ input[type=file]{display:none}
     <div class="fg"><label>Amount</label><input id="ctAmount" type="number" placeholder="e.g. 1000" step="any"/></div>
     <div id="ctDivFields" style="display:none">
       <div class="fr">
-        <div class="fg"><label>Symbol (for dividend)</label><input id="ctSymbol" placeholder="e.g. DBS"/></div>
+        <div class="fg"><label>Symbol</label><input id="ctSymbol" placeholder="e.g. DBS"/></div>
         <div class="fg"><label>Stock Name</label><input id="ctStockName" placeholder="e.g. DBS Group"/></div>
       </div>
     </div>
     <div class="fg"><label>Portfolio</label>
       <select id="ctPortfolio"><option>SGX</option><option>NYSE</option><option>NASDAQ</option><option>HKEX</option><option>LSE</option><option>USX</option><option>Other</option></select>
     </div>
-    <div class="fg"><label>Notes (optional)</label><textarea id="ctNotes" rows="2" placeholder="Anything you'd like to note…"></textarea></div>
+    <div class="fg"><label>Notes (optional)</label><textarea id="ctNotes" rows="2" placeholder="Anything you'd like to note..."></textarea></div>
     <div style="display:flex;gap:8px;margin-top:5px">
       <button class="btn btn-primary" onclick="addCashTx()" style="flex:1">Add</button>
       <button class="btn btn-ghost" onclick="closeModal('addCashTxModal')">Cancel</button>
@@ -515,7 +519,6 @@ input[type=file]{display:none}
   </div>
 </div>
 
-<!-- EDIT CASH TX MODAL -->
 <div class="modal-bg" id="editCashTxModal">
   <div class="modal">
     <h3>Edit Cash Transaction</h3>
@@ -543,13 +546,13 @@ input[type=file]{display:none}
   </div>
 </div>
 
-<!-- WATCHLIST / ALERT MODALS -->
 <div class="modal-bg" id="addWatchModal">
   <div class="modal"><h3>Add to Watchlist</h3>
     <div class="fr"><div class="fg"><label>Ticker</label><input id="wTicker"/></div><div class="fg"><label>Name</label><input id="wName"/></div></div>
     <div style="display:flex;gap:8px;margin-top:5px"><button class="btn btn-primary" onclick="addWatch()" style="flex:1">Add</button><button class="btn btn-ghost" onclick="closeModal('addWatchModal')">Cancel</button></div>
   </div>
 </div>
+
 <div class="modal-bg" id="alertModal">
   <div class="modal"><h3>Set Price Alert</h3>
     <div class="fr"><div class="fg"><label>Ticker</label><input id="alTicker"/></div><div class="fg"><label>Condition</label><select id="alCond"><option>Above</option><option>Below</option></select></div></div>
@@ -566,6 +569,7 @@ let firebaseConfig={}, emailConfig={};
 let txPage=1, cashPage=1;
 const PER=20;
 let curTxAction='Buy', curEditAction='Buy', curCashAction='DEPOSIT';
+const livePrices={};
 
 const FX={USD:1,SGD:1.35,HKD:7.82,GBP:0.79,GBX:0.0079,EUR:0.92,JPY:151.2};
 const toUSD=(a,c)=>a/(FX[c]||1);
@@ -574,15 +578,12 @@ const fmt=u=>baseCurrency+' '+toBase(u).toLocaleString(undefined,{minimumFractio
 const geoMap={SGX:'SG',NYSE:'US',NASDAQ:'US',USX:'US',LSE:'GB',HKEX:'HK',TSE:'JP',ASX:'AU',XETRA:'EU',MYX:'MY'};
 const today=()=>new Date().toISOString().split('T')[0];
 
-// ===================== LIVE PRICE STORE =====================
-const livePrices={};
-
 // ===================== HOLDINGS =====================
 function buildHoldings(){
   const map={};
   transactions.forEach(tx=>{
     const k=tx.ticker; if(!k)return;
-    if(!map[k])map[k]={ticker:k,name:tx.name||k,exchange:tx.exchange||'',geo:geoMap[tx.exchange]||'US',currency:tx.currency||'USD',shares:0,totalCostUSD:0,price:0,prevPrice:0,divYield:0,beta:1};
+    if(!map[k])map[k]={ticker:k,name:tx.name||k,exchange:tx.exchange||'',geo:geoMap[tx.exchange]||'US',currency:tx.currency||'USD',shares:0,totalCostUSD:0,price:0,divYield:0,beta:1};
     const pUSD=toUSD(tx.price||0,tx.currency||'USD');
     const fUSD=toUSD(tx.fees||0,tx.currency||'USD');
     if(tx.action==='Buy'){
@@ -602,8 +603,8 @@ function buildHoldings(){
   });
   return Object.values(map);
 }
-const openH=()=>buildHoldings().filter(h=>h.shares>0.0001).map(calcH);
 const calcH=h=>{const avg=h.shares>0?h.totalCostUSD/h.shares:0;const mv=h.shares*(h.price||avg);const pnl=mv-h.totalCostUSD;const pct=h.totalCostUSD>0?pnl/h.totalCostUSD*100:0;return{...h,avg,mv,pnl,pct,annDiv:mv*(h.divYield||0)/100};};
+const openH=()=>buildHoldings().filter(h=>h.shares>0.0001).map(calcH);
 const totalMV=()=>openH().reduce((s,h)=>s+h.mv,0);
 const totalCost=()=>openH().reduce((s,h)=>s+h.totalCostUSD,0);
 const totalPnL=()=>totalMV()-totalCost();
@@ -623,29 +624,18 @@ function cashBalances(){
 }
 const totalCashUSD=()=>Object.entries(cashBalances()).reduce((s,[c,a])=>s+toUSD(a,c),0);
 
-// ===================== DIVIDEND → CASH AUTO-SYNC =====================
 function syncDivToCash(div){
-  const key=`DIV_${div.ticker}_${div.date}_${div.amount.toFixed(4)}`;
-  const exists=cashTxList.some(ct=>ct._key===key);
-  if(!exists){
-    const h=openH().find(x=>x.ticker===div.ticker);
-    cashTxList.push({
-      _key:key,
-      type:'DIVIDEND',date:div.date,
-      currency:baseCurrency,
-      amount:parseFloat(toBase(div.amount).toFixed(2)),
-      details:`Dividend payout from ${div.name||div.ticker}`,
-      symbol:div.ticker,stockName:div.name||div.ticker,
-      portfolio:h?.exchange||'—'
-    });
-  }
+  const key='DIV_'+div.ticker+'_'+div.date+'_'+div.amount.toFixed(4);
+  if(cashTxList.some(ct=>ct._key===key))return;
+  const h=openH().find(x=>x.ticker===div.ticker);
+  cashTxList.push({_key:key,type:'DIVIDEND',date:div.date,currency:baseCurrency,amount:parseFloat(toBase(div.amount).toFixed(2)),details:'Dividend payout from '+(div.name||div.ticker),symbol:div.ticker,stockName:div.name||div.ticker,portfolio:h?h.exchange:'--'});
 }
 
 // ===================== CHARTS =====================
 let portfolioChart,allocChart,divChart,plChart,sectorChart;
 function initCharts(){
-  portfolioChart=new Chart(document.getElementById('portfolioChart').getContext('2d'),{type:'line',data:{labels:[],datasets:[{label:'Value',data:[],borderColor:'#6c63ff',backgroundColor:'rgba(108,99,255,0.07)',borderWidth:2,tension:.4,pointRadius:0,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#5a6282',font:{size:11},maxTicksLimit:7}},y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#5a6282',font:{size:11},callback:v=>{const b=toBase(v/(FX[baseCurrency]||1));return baseCurrency+' '+(b>=1000?(b/1000).toFixed(0)+'k':b.toFixed(0));}}}}}}); 
-  allocChart=new Chart(document.getElementById('allocChart').getContext('2d'),{type:'doughnut',data:{labels:[],datasets:[{data:[],backgroundColor:[],borderWidth:0,hoverOffset:5}]},options:{responsive:true,maintainAspectRatio:false,cutout:'66%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${fmt(ctx.raw)}`}}}}});
+  portfolioChart=new Chart(document.getElementById('portfolioChart').getContext('2d'),{type:'line',data:{labels:[],datasets:[{label:'Value',data:[],borderColor:'#6c63ff',backgroundColor:'rgba(108,99,255,0.07)',borderWidth:2,tension:.4,pointRadius:0,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#5a6282',font:{size:11},maxTicksLimit:7}},y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#5a6282',font:{size:11},callback:v=>{const b=toBase(v/(FX[baseCurrency]||1));return baseCurrency+' '+(b>=1000?(b/1000).toFixed(0)+'k':b.toFixed(0));}}}}}});
+  allocChart=new Chart(document.getElementById('allocChart').getContext('2d'),{type:'doughnut',data:{labels:[],datasets:[{data:[],backgroundColor:[],borderWidth:0,hoverOffset:5}]},options:{responsive:true,maintainAspectRatio:false,cutout:'66%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.label+': '+fmt(ctx.raw)}}}}});
   divChart=new Chart(document.getElementById('divChart').getContext('2d'),{type:'bar',data:{labels:[],datasets:[{label:'Dividends',data:[],backgroundColor:'rgba(108,99,255,0.55)',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#5a6282',font:{size:11}}},y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#5a6282',font:{size:11}}}}}});
   plChart=new Chart(document.getElementById('plChart').getContext('2d'),{type:'bar',data:{labels:[],datasets:[{label:'P&L',data:[],backgroundColor:[],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#5a6282',font:{size:11}}},y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#5a6282',font:{size:11}}}}}});
   sectorChart=new Chart(document.getElementById('sectorChart').getContext('2d'),{type:'polarArea',data:{labels:[],datasets:[{data:[],backgroundColor:[],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#9ba3c0',font:{size:11},boxWidth:10}}},scales:{r:{grid:{color:'rgba(255,255,255,.06)'},ticks:{display:false}}}}});
@@ -657,7 +647,7 @@ function updateAllocChart(){
   const labels=Object.keys(geo),vals=labels.map(k=>geo[k]),colors=labels.map(k=>cols[k]||'#9ba3c0');
   allocChart.data.labels=labels;allocChart.data.datasets[0].data=vals;allocChart.data.datasets[0].backgroundColor=colors;allocChart.update();
   const totMV=totalMV();
-  document.getElementById('allocLegend').innerHTML=labels.length?labels.map((l,i)=>`<div style="display:flex;align-items:center;gap:7px;font-size:13px"><div class="alloc-dot" style="background:${colors[i]}"></div><span style="color:var(--text2);flex:1">${l}</span><span style="color:var(--text3);font-size:11px">${fmt(vals[i])}</span><span style="font-weight:700;min-width:38px;text-align:right">${totMV>0?(vals[i]/totMV*100).toFixed(1):0}%</span></div>`).join(''):'<div style="color:var(--text3)">No holdings</div>';
+  document.getElementById('allocLegend').innerHTML=labels.length?labels.map((l,i)=>'<div style="display:flex;align-items:center;gap:7px;font-size:13px"><div class="alloc-dot" style="background:'+colors[i]+'"></div><span style="color:var(--text2);flex:1">'+l+'</span><span style="color:var(--text3);font-size:11px">'+fmt(vals[i])+'</span><span style="font-weight:700;min-width:38px;text-align:right">'+(totMV>0?(vals[i]/totMV*100).toFixed(1):0)+'%</span></div>').join(''):'<div style="color:var(--text3)">No holdings</div>';
 }
 
 function updatePLChart(){
@@ -675,14 +665,31 @@ function updateSectorChart(){
   sectorChart.data.labels=labels;sectorChart.data.datasets[0].data=labels.map(k=>exMap[k]);sectorChart.data.datasets[0].backgroundColor=cols.slice(0,labels.length);sectorChart.update();
 }
 
-function updateDivChart(view='annual'){
+function updateDivChart(view){
+  view=view||'annual';
   const ym={};
   dividends.forEach(d=>{if(!d.date)return;const y=d.date.slice(0,4);if(!ym[y])ym[y]={total:0,byTicker:{},byMonth:Array(12).fill(0)};ym[y].total+=d.amount;ym[y].byTicker[d.ticker]=(ym[y].byTicker[d.ticker]||0)+d.amount;ym[y].byMonth[parseInt(d.date.slice(5,7))-1]+=d.amount;});
-  window._ym=ym;const years=Object.keys(ym).sort();
-  if(view==='annual'){divChart.data.labels=years;divChart.data.datasets=[{label:'Dividends',data:years.map(y=>toBase(ym[y].total)),backgroundColor:years.map((_,i)=>i===years.length-1?'#00c896bb':'rgba(108,99,255,0.55)'),borderRadius:4}];divChart.options.plugins.legend.display=false;}
-  else if(view==='monthly'){const cur=new Date().getFullYear().toString(),now=new Date().getMonth();divChart.data.labels=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];divChart.data.datasets=[{label:'Dividends',data:(ym[cur]?.byMonth||Array(12).fill(0)).map(v=>toBase(v)),backgroundColor:Array(12).fill(0).map((_,i)=>i<=now?'#00c896bb':'rgba(108,99,255,0.35)'),borderRadius:4}];divChart.options.plugins.legend.display=false;}
-  else{const tickers=[...new Set(dividends.map(d=>d.ticker))],colors=['#6c63ffbb','#00d2ffbb','#00c896bb','#ffb347bb','#ff6eb4bb','#ff5c7abb','#20e3b2bb','#9ba3c0bb'];divChart.data.labels=years;divChart.data.datasets=tickers.map((t,i)=>({label:t,data:years.map(y=>toBase(ym[y]?.byTicker[t]||0)),backgroundColor:colors[i%colors.length],borderRadius:3,stack:'s'}));divChart.options.plugins.legend.display=true;divChart.options.plugins.legend.labels={color:'#9ba3c0',font:{size:11},boxWidth:9};}
-  divChart.update();renderDivSummary(ym,years);
+  window._ym=ym;
+  const years=Object.keys(ym).sort();
+  if(view==='annual'){
+    divChart.data.labels=years;
+    divChart.data.datasets=[{label:'Dividends',data:years.map(y=>toBase(ym[y].total)),backgroundColor:years.map((_,i)=>i===years.length-1?'#00c896bb':'rgba(108,99,255,0.55)'),borderRadius:4}];
+    divChart.options.plugins.legend.display=false;
+  } else if(view==='monthly'){
+    const cur=new Date().getFullYear().toString(),now=new Date().getMonth();
+    divChart.data.labels=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    divChart.data.datasets=[{label:'Dividends',data:(ym[cur]?ym[cur].byMonth:Array(12).fill(0)).map(v=>toBase(v)),backgroundColor:Array(12).fill(0).map((_,i)=>i<=now?'#00c896bb':'rgba(108,99,255,0.35)'),borderRadius:4}];
+    divChart.options.plugins.legend.display=false;
+  } else {
+    const tickers=[...new Set(dividends.map(d=>d.ticker))];
+    const colors=['#6c63ffbb','#00d2ffbb','#00c896bb','#ffb347bb','#ff6eb4bb','#ff5c7abb','#20e3b2bb','#9ba3c0bb'];
+    divChart.data.labels=years;
+    divChart.data.datasets=tickers.map((t,i)=>({label:t,data:years.map(y=>toBase(ym[y]?ym[y].byTicker[t]||0:0)),backgroundColor:colors[i%colors.length],borderRadius:3,stack:'s'}));
+    divChart.options.plugins.legend.display=true;
+    divChart.options.plugins.legend.labels={color:'#9ba3c0',font:{size:11},boxWidth:9};
+  }
+  divChart.update();
+  renderDivSummary(ym,years);
 }
 
 function switchDivView(view,btn){document.querySelectorAll('#divPills .pill').forEach(p=>p.classList.remove('active'));btn.classList.add('active');updateDivChart(view);}
@@ -691,25 +698,25 @@ function renderDivSummary(ym,years){
   if(!years||!years.length){document.getElementById('divSummaryRow').innerHTML='';return;}
   const allTime=years.reduce((s,y)=>s+ym[y].total,0);
   const cur=new Date().getFullYear().toString(),prev=(new Date().getFullYear()-1).toString();
-  const ytd=ym[cur]?.total||0,prevT=ym[prev]?.total||0;
+  const ytd=ym[cur]?ym[cur].total:0,prevT=ym[prev]?ym[prev].total:0;
   const yoy=prevT>0?((ytd-prevT)/prevT*100).toFixed(1):'N/A';
-  document.getElementById('divSummaryRow').innerHTML=[['All-time',fmt(allTime),'var(--accent)'],[prev,fmt(prevT),'var(--green)'],[cur+' YTD',fmt(ytd),'var(--amber)'],['YoY',yoy!=='N/A'?(parseFloat(yoy)>=0?'+':'')+yoy+'%':'N/A','var(--teal)']].map(([l,v,c])=>`<div style="text-align:center;background:var(--bg3);border-radius:var(--rsm);padding:9px 14px;flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">${l}</div><div style="font-size:17px;font-weight:700;color:${c}">${v}</div></div>`).join('');
+  document.getElementById('divSummaryRow').innerHTML=[['All-time',fmt(allTime),'var(--accent)'],[prev,fmt(prevT),'var(--green)'],[cur+' YTD',fmt(ytd),'var(--amber)'],['YoY',yoy!=='N/A'?(parseFloat(yoy)>=0?'+':'')+yoy+'%':'N/A','var(--teal)']].map(function(x){return '<div style="text-align:center;background:var(--bg3);border-radius:var(--rsm);padding:9px 14px;flex:1;min-width:110px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">'+x[0]+'</div><div style="font-size:17px;font-weight:700;color:'+x[2]+'">'+x[1]+'</div></div>';}).join('');
 }
 
 function switchChart(period,btn){
   document.querySelectorAll('#chartPills .pill').forEach(p=>p.classList.remove('active'));btn.classList.add('active');
   if(!transactions.length){portfolioChart.data.labels=[];portfolioChart.data.datasets[0].data=[];portfolioChart.update();return;}
   const now=new Date(),end=toBase(totalMV());
-  let sd,tc,lf;
-  if(period==='1M'){sd=new Date(now.getFullYear(),now.getMonth()-1,now.getDate());tc=30;lf=d=>d.toLocaleDateString('en',{month:'short',day:'numeric'});}
-  else if(period==='6M'){sd=new Date(now.getFullYear(),now.getMonth()-6,now.getDate());tc=26;lf=d=>d.toLocaleDateString('en',{month:'short',day:'numeric'});}
-  else if(period==='YTD'){sd=new Date(now.getFullYear(),0,1);tc=Math.max(now.getMonth()+1,2);lf=d=>d.toLocaleDateString('en',{month:'short'});}
-  else if(period==='1Y'){sd=new Date(now.getFullYear()-1,now.getMonth(),now.getDate());tc=12;lf=d=>d.toLocaleDateString('en',{month:'short',year:'2-digit'});}
-  else if(period==='5Y'){sd=new Date(now.getFullYear()-5,now.getMonth(),now.getDate());tc=20;lf=d=>d.toLocaleDateString('en',{month:'short',year:'numeric'});}
-  else{const e=transactions.map(t=>new Date(t.date)).filter(d=>!isNaN(d)).sort((a,b)=>a-b)[0]||new Date(now.getFullYear()-2,0,1);sd=e;tc=24;lf=d=>d.toLocaleDateString('en',{month:'short',year:'numeric'});}
+  var sd,tc,lf;
+  if(period==='1M'){sd=new Date(now.getFullYear(),now.getMonth()-1,now.getDate());tc=30;lf=function(d){return d.toLocaleDateString('en',{month:'short',day:'numeric'});};}
+  else if(period==='6M'){sd=new Date(now.getFullYear(),now.getMonth()-6,now.getDate());tc=26;lf=function(d){return d.toLocaleDateString('en',{month:'short',day:'numeric'});};}
+  else if(period==='YTD'){sd=new Date(now.getFullYear(),0,1);tc=Math.max(now.getMonth()+1,2);lf=function(d){return d.toLocaleDateString('en',{month:'short'});};}
+  else if(period==='1Y'){sd=new Date(now.getFullYear()-1,now.getMonth(),now.getDate());tc=12;lf=function(d){return d.toLocaleDateString('en',{month:'short',year:'2-digit'});};}
+  else if(period==='5Y'){sd=new Date(now.getFullYear()-5,now.getMonth(),now.getDate());tc=20;lf=function(d){return d.toLocaleDateString('en',{month:'short',year:'numeric'});};}
+  else{var e=transactions.map(function(t){return new Date(t.date);}).filter(function(d){return !isNaN(d);}).sort(function(a,b){return a-b;})[0]||new Date(now.getFullYear()-2,0,1);sd=e;tc=24;lf=function(d){return d.toLocaleDateString('en',{month:'short',year:'numeric'});};}
   const ms=now-sd,base=end*0.45;
-  const labels=Array.from({length:tc},(_,i)=>lf(new Date(sd.getTime()+ms*(i/(tc-1)))));
-  const data=labels.map((_,i)=>Math.max(0,Math.round(base+(end-base)*Math.pow(i/(tc-1),0.82)+(Math.sin(i*3.9)*0.022*end))));
+  const labels=Array.from({length:tc},function(_,i){return lf(new Date(sd.getTime()+ms*(i/(tc-1))));});
+  const data=labels.map(function(_,i){return Math.max(0,Math.round(base+(end-base)*Math.pow(i/(tc-1),0.82)+(Math.sin(i*3.9)*0.022*end)));});
   data[data.length-1]=Math.round(end);
   portfolioChart.data.labels=labels;portfolioChart.data.datasets[0].data=data;portfolioChart.update();
 }
@@ -719,245 +726,262 @@ function renderMetrics(){
   const mv=totalMV(),pnl=totalPnL(),div=totalAnnDiv(),cost=totalCost(),cash=totalCashUSD();
   const pct=cost>0?pnl/cost*100:0;
   document.getElementById('metricsRow').innerHTML=transactions.length===0&&cashTxList.length===0
-    ?`<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3)">Import your CSV or add a transaction to get started.</div>`
-    :`<div class="metric m-purple"><div class="metric-label">Portfolio Value</div><div class="metric-value">${fmt(mv)}</div><div class="metric-sub">Cost: ${fmt(cost)}</div></div>
-      <div class="metric m-green"><div class="metric-label">Unrealized P&L</div><div class="metric-value ${pnl>=0?'pos':'neg'}">${pnl>=0?'+':''}${fmt(pnl)}</div><div class="metric-sub ${pnl>=0?'pos':'neg'}">${pnl>=0?'+':''}${pct.toFixed(2)}%</div></div>
-      <div class="metric m-amber"><div class="metric-label">Annual Dividends</div><div class="metric-value">${fmt(div)}</div><div class="metric-sub">Yield: ${mv>0?(div/mv*100).toFixed(2):0}%</div></div>
-      <div class="metric m-cyan"><div class="metric-label">Monthly Income</div><div class="metric-value">${fmt(div/12)}</div></div>
-      <div class="metric m-teal"><div class="metric-label">Total Cash</div><div class="metric-value">${fmt(cash)}</div><div class="metric-sub">${Object.keys(cashBalances()).length} currencies</div></div>
-      <div class="metric m-pink"><div class="metric-label">Net Worth</div><div class="metric-value">${fmt(mv+cash)}</div><div class="metric-sub">Investments + Cash</div></div>`;
+    ?'<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3)">Import your CSV or add a transaction to get started.</div>'
+    :'<div class="metric m-purple"><div class="metric-label">Portfolio Value</div><div class="metric-value">'+fmt(mv)+'</div><div class="metric-sub">Cost: '+fmt(cost)+'</div></div>'
+    +'<div class="metric m-green"><div class="metric-label">Unrealized P&L</div><div class="metric-value '+(pnl>=0?'pos':'neg')+'">'+(pnl>=0?'+':'')+fmt(pnl)+'</div><div class="metric-sub '+(pnl>=0?'pos':'neg')+'">'+(pnl>=0?'+':'')+pct.toFixed(2)+'%</div></div>'
+    +'<div class="metric m-amber"><div class="metric-label">Annual Dividends</div><div class="metric-value">'+fmt(div)+'</div><div class="metric-sub">Yield: '+(mv>0?(div/mv*100).toFixed(2):0)+'%</div></div>'
+    +'<div class="metric m-cyan"><div class="metric-label">Monthly Income</div><div class="metric-value">'+fmt(div/12)+'</div></div>'
+    +'<div class="metric m-teal"><div class="metric-label">Total Cash</div><div class="metric-value">'+fmt(cash)+'</div><div class="metric-sub">'+Object.keys(cashBalances()).length+' currencies</div></div>'
+    +'<div class="metric m-pink"><div class="metric-label">Net Worth</div><div class="metric-value">'+fmt(mv+cash)+'</div><div class="metric-sub">Investments + Cash</div></div>';
+}
+
+function renderHoldingsSummaryTable(){
+  const allH=buildHoldings();
+  const oh=allH.filter(h=>h.shares>0.0001).map(calcH);
+  const curMap={};
+  oh.forEach(function(h){
+    const c=h.currency||'USD';
+    if(!curMap[c])curMap[c]={mv:0,cost:0,pnl:0,annDiv:0};
+    curMap[c].mv+=h.mv;curMap[c].cost+=h.totalCostUSD;curMap[c].pnl+=h.pnl;curMap[c].annDiv+=h.annDiv;
+  });
+  const closedPnl={};
+  const runSh={},runCost={};
+  [...transactions].sort(function(a,b){return new Date(a.date)-new Date(b.date);}).forEach(function(tx){
+    const k=tx.ticker,cur=tx.currency||'USD';
+    if(!runSh[k]){runSh[k]=0;runCost[k]=0;}
+    const pUSD=toUSD(tx.price||0,cur);
+    if(tx.action==='Buy'){runCost[k]+=(tx.shares||0)*pUSD+toUSD(tx.fees||0,cur);runSh[k]+=(tx.shares||0);}
+    else if(tx.action==='Sell'){
+      const avg=runSh[k]>0?runCost[k]/runSh[k]:pUSD;
+      const realised=(pUSD-avg)*(tx.shares||0)-toUSD(tx.fees||0,cur);
+      if(!closedPnl[cur])closedPnl[cur]={pnl:0,cost:0};
+      closedPnl[cur].pnl+=realised;closedPnl[cur].cost+=avg*(tx.shares||0);
+      runCost[k]=Math.max(0,runCost[k]-avg*(tx.shares||0));runSh[k]=Math.max(0,runSh[k]-(tx.shares||0));
+    }
+  });
+  const totalMVBase=Object.values(curMap).reduce(function(s,d){return s+toBase(d.mv);},0);
+  function fmtPnl(val,cost){
+    const sign=val>=0?'+':'';
+    const pct=cost>0?(val/cost*100).toFixed(2):'0.00';
+    const color=val>=0?'var(--green)':'var(--red)';
+    return '<span style="color:'+color+';font-weight:600">'+sign+baseCurrency+' '+toBase(val).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' ('+(val>=0?'+':'')+pct+'%)</span>';
+  }
+  const currencies=Object.keys(curMap).sort();
+  const grandMV=totalMVBase;
+  const grandOpenPnl=Object.values(curMap).reduce(function(s,d){return s+toBase(d.pnl+d.annDiv);},0);
+  const grandOpenCostBase=Object.values(curMap).reduce(function(s,d){return s+toBase(d.cost);},0);
+  const grandOpenPct=grandOpenCostBase>0?(grandOpenPnl/grandOpenCostBase*100).toFixed(2):'0.00';
+  const grandClosedPnlBase=toBase(Object.values(closedPnl).reduce(function(s,d){return s+d.pnl;},0));
+  const grandClosedCostBase=toBase(Object.values(closedPnl).reduce(function(s,d){return s+d.cost;},0));
+  const grandClosedPct=grandClosedCostBase>0?(grandClosedPnlBase/grandClosedCostBase*100).toFixed(2):'0.00';
+  const grandOverall=grandOpenPnl+grandClosedPnlBase;
+  const grandOverallCostBase=grandOpenCostBase+grandClosedCostBase;
+  const grandOverallPct=grandOverallCostBase>0?(grandOverall/grandOverallCostBase*100).toFixed(2):'0.00';
+  function gc(v){return v>=0?'var(--green)':'var(--red)';}
+  function gs(v){return v>=0?'+':'';}
+  const rows=currencies.map(function(cur){
+    const d=curMap[cur];
+    const mvBase=toBase(d.mv);
+    const portPct=totalMVBase>0?(mvBase/totalMVBase*100).toFixed(1):'0.0';
+    const openPnlDiv=d.pnl+d.annDiv;
+    const cpnl=closedPnl[cur]||{pnl:0,cost:0};
+    const overall=openPnlDiv+cpnl.pnl;
+    const overallCost=d.cost+cpnl.cost;
+    return '<tr><td style="font-weight:600">'+cur+'</td><td>'+baseCurrency+' '+mvBase.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})+' <span style="color:var(--text3)">('+portPct+'%)</span></td><td>'+fmtPnl(openPnlDiv,d.cost)+'</td><td>'+fmtPnl(cpnl.pnl,cpnl.cost)+'</td><td>'+fmtPnl(overall,overallCost)+'</td></tr>';
+  }).join('');
+  document.getElementById('holdingsSummaryTable').innerHTML='<table class="tbl"><thead><tr><th>Currency</th><th>Current Value</th><th>Current P&L (+Div)</th><th>Closed P&L (+Div)</th><th>Overall P&L (+Div)</th></tr></thead><tbody>'+rows+'<tr style="border-top:2px solid var(--border);font-weight:700"><td>Total in '+baseCurrency+'</td><td>'+baseCurrency+' '+grandMV.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td><td><span style="color:'+gc(grandOpenPnl)+';font-weight:700">'+gs(grandOpenPnl)+baseCurrency+' '+Math.abs(grandOpenPnl).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' ('+(grandOpenPnl>=0?'+':'')+grandOpenPct+'%)</span></td><td><span style="color:'+gc(grandClosedPnlBase)+';font-weight:700">'+gs(grandClosedPnlBase)+baseCurrency+' '+Math.abs(grandClosedPnlBase).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' ('+(grandClosedPnlBase>=0?'+':'')+grandClosedPct+'%)</span></td><td><span style="color:'+gc(grandOverall)+';font-weight:700">'+gs(grandOverall)+baseCurrency+' '+Math.abs(grandOverall).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' ('+(grandOverall>=0?'+':'')+grandOverallPct+'%)</span></td></tr></tbody></table>';
 }
 
 function renderTopHoldings(){
-  const sorted=openH().sort((a,b)=>b.mv-a.mv).slice(0,8);
+  const sorted=openH().sort(function(a,b){return b.mv-a.mv;}).slice(0,8);
   document.getElementById('topHoldingsBody').innerHTML=sorted.length
-    ?`<table class="tbl"><thead><tr><th>No.</th><th>Exchange</th><th>Symbol</th><th>Stock Name</th><th class="r">Mkt Value</th><th class="r">P&L</th><th class="r">P&L%</th></tr></thead><tbody>${sorted.map((h,i)=>`<tr><td style="color:var(--text3)">${i+1}</td><td><span class="badge badge-cyan">${h.exchange}</span></td><td><b>${h.ticker}</b></td><td style="color:var(--text2)">${h.name}</td><td class="r">${fmt(h.mv)}</td><td class="r ${h.pnl>=0?'pos':'neg'}">${h.pnl>=0?'+':''}${fmt(h.pnl)}</td><td class="r"><span class="badge ${h.pct>=0?'badge-green':'badge-red'}">${h.pct>=0?'+':''}${h.pct.toFixed(1)}%</span></td></tr>`).join('')}</tbody></table>`
-    :`<div style="text-align:center;padding:24px;color:var(--text3)">No holdings yet.</div>`;
+    ?'<table class="tbl"><thead><tr><th>No.</th><th>Exchange</th><th>Symbol</th><th>Stock Name</th><th class="r">Mkt Value</th><th class="r">P&L</th><th class="r">P&L%</th></tr></thead><tbody>'+sorted.map(function(h,i){return '<tr><td style="color:var(--text3)">'+(i+1)+'</td><td><span class="badge badge-cyan">'+h.exchange+'</span></td><td><b>'+h.ticker+'</b></td><td style="color:var(--text2)">'+h.name+'</td><td class="r">'+fmt(h.mv)+'</td><td class="r '+(h.pnl>=0?'pos':'neg')+'">'+(h.pnl>=0?'+':'')+fmt(h.pnl)+'</td><td class="r"><span class="badge '+(h.pct>=0?'badge-green':'badge-red')+'">'+(h.pct>=0?'+':'')+h.pct.toFixed(1)+'%</span></td></tr>';}).join('')+'</tbody></table>'
+    :'<div style="text-align:center;padding:24px;color:var(--text3)">No holdings yet.</div>';
 }
 
 function renderUpcomingDivs(){
   const td=new Date();
-  const up=dividends.filter(d=>new Date(d.date)>=td).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,5);
+  const up=dividends.filter(function(d){return new Date(d.date)>=td;}).sort(function(a,b){return new Date(a.date)-new Date(b.date);}).slice(0,5);
   document.getElementById('upcomingDivList').innerHTML=up.length
-    ?up.map(d=>`<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)"><div style="flex:1"><b>${d.ticker}</b><span style="color:var(--text3);font-size:12px;margin-left:6px">${d.name||''}</span></div><div style="text-align:right"><div style="color:var(--green);font-weight:600">+${fmt(d.amount)}</div><div style="font-size:11px;color:var(--text3)">${d.date}</div></div></div>`).join('')
-    :`<div style="color:var(--text3);padding:8px 0">No upcoming dividends tracked.</div>`;
+    ?up.map(function(d){return '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)"><div style="flex:1"><b>'+d.ticker+'</b><span style="color:var(--text3);font-size:12px;margin-left:6px">'+(d.name||'')+'</span></div><div style="text-align:right"><div style="color:var(--green);font-weight:600">+'+fmt(d.amount)+'</div><div style="font-size:11px;color:var(--text3)">'+d.date+'</div></div></div>';}).join('')
+    :'<div style="color:var(--text3);padding:8px 0">No upcoming dividends tracked.</div>';
 }
 
 function renderHoldings(){
+  renderHoldingsSummaryTable();
   const search=(document.getElementById('searchHoldings')||{value:''}).value.toLowerCase();
-  const all=holdingView==='open'?openH():buildHoldings().filter(h=>h.shares<0.0001).map(calcH);
-  const rows=all.filter(h=>h.ticker.toLowerCase().includes(search)||(h.name||'').toLowerCase().includes(search));
-  const mv=rows.reduce((s,h)=>s+h.mv,0),cost=rows.reduce((s,h)=>s+h.totalCostUSD,0),pnl=mv-cost;
-  const byCur={};rows.forEach(h=>{const c=h.currency||'SGD';if(!byCur[c])byCur[c]={n:0,mv:0};byCur[c].n++;byCur[c].mv+=h.mv;});
-  document.getElementById('holdingSummaryRow').innerHTML=`
-    <span>Beta = <b>0.0</b></span><span style="color:var(--border)">|</span>
-    <span>VaR = <b>${mv>0?(mv*0.024/mv*100).toFixed(2):0}%</b></span><span style="color:var(--border)">|</span>
-    <span>Expected Shortfall = <b>${mv>0?(mv*0.035/mv*100).toFixed(2):0}%</b></span>
-    ${Object.entries(byCur).map(([c,d])=>`<span style="margin-left:8px;background:var(--bg3);border-radius:3px;padding:2px 8px;font-size:12px"><b>${c}</b> ${d.n} stocks · ${fmt(d.mv)}</span>`).join('')}`;
-  if(!rows.length){document.getElementById('holdingsContent').innerHTML=`<div style="text-align:center;padding:30px;color:var(--text3)">${holdingView==='open'?'No open positions.':'No closed positions.'}</div>`;return;}
-  document.getElementById('holdingsContent').innerHTML=`<div class="tbl-wrap"><table class="tbl"><thead><tr>
-    <th>No.</th><th>Symbol</th><th>Stock Name</th><th>Port%</th><th class="r">Shares</th><th class="r">APrice</th><th class="r">CostY%</th><th class="r">CurrY%</th><th class="r">Close</th><th>Cur</th><th class="r">Cost</th><th class="r">P&L%</th><th class="r">Div%</th><th class="r">P&L+Div</th>
-  </tr></thead><tbody>${rows.map((h,i)=>{
+  const all=holdingView==='open'?openH():buildHoldings().filter(function(h){return h.shares<=0.0001;}).map(calcH);
+  const rows=all.filter(function(h){return h.ticker.toLowerCase().includes(search)||(h.name||'').toLowerCase().includes(search);});
+  const mv=rows.reduce(function(s,h){return s+h.mv;},0);
+  const byCur={};
+  rows.forEach(function(h){const c=h.currency||'SGD';if(!byCur[c])byCur[c]={n:0,mv:0};byCur[c].n++;byCur[c].mv+=h.mv;});
+  document.getElementById('holdingSummaryRow').innerHTML='<span>Beta = <b>0.0</b></span><span style="color:var(--border)">|</span><span>VaR = <b>'+(mv>0?(mv*0.024/mv*100).toFixed(2):0)+'%</b></span><span style="color:var(--border)">|</span><span>Expected Shortfall = <b>'+(mv>0?(mv*0.035/mv*100).toFixed(2):0)+'%</b></span>'+Object.entries(byCur).map(function(e){return '<span style="margin-left:8px;background:var(--bg3);border-radius:3px;padding:2px 8px;font-size:12px"><b>'+e[0]+'</b> '+e[1].n+' stocks &middot; '+fmt(e[1].mv)+'</span>';}).join('');
+  if(!rows.length){document.getElementById('holdingsContent').innerHTML='<div style="text-align:center;padding:30px;color:var(--text3)">'+(holdingView==='open'?'No open positions.':'No closed positions.')+'</div>';return;}
+  document.getElementById('holdingsContent').innerHTML='<div class="tbl-wrap"><table class="tbl"><thead><tr><th>No.</th><th>Symbol</th><th>Stock Name</th><th>Port%</th><th class="r">Shares</th><th class="r">APrice</th><th class="r">CostY%</th><th class="r">CurrY%</th><th class="r">Close</th><th>Cur</th><th class="r">Cost</th><th class="r">P&L%</th><th class="r">Div%</th><th class="r">P&L+Div</th></tr></thead><tbody>'+rows.map(function(h,i){
     const portPct=mv>0?(h.mv/mv*100).toFixed(2):'0.00';
     const divPct=(h.divYield||0).toFixed(2);
     const costY=h.totalCostUSD>0?(h.annDiv/h.totalCostUSD*100).toFixed(2):'0.00';
     const currY=h.mv>0?(h.annDiv/h.mv*100).toFixed(2):'0.00';
     const plDiv=h.pnl+h.annDiv;
-    return`<tr>
-      <td style="color:var(--text3)">${i+1}</td>
-      <td><b>${h.ticker}</b></td>
-      <td style="color:var(--text2)">${h.name}</td>
-      <td>${portPct}%</td>
-      <td class="r">${h.shares.toLocaleString(undefined,{maximumFractionDigits:4})}</td>
-      <td class="r">${h.currency} ${((h.avg||0)*(FX[h.currency]||1)).toFixed(4)}</td>
-      <td class="r">${costY}%</td>
-      <td class="r">${currY}%</td>
-      <td class="r">${((h.price||0)*(FX[h.currency]||1)).toFixed(3)}</td>
-      <td>${h.currency}</td>
-      <td class="r">${fmt(h.totalCostUSD)}</td>
-      <td class="r ${h.pct>=0?'pos':'neg'}">${h.pct>=0?'+':''}${h.pct.toFixed(2)}%</td>
-      <td class="r">${divPct}%</td>
-      <td class="r ${plDiv>=0?'pos':'neg'}">${plDiv>=0?'+':''}${fmt(plDiv)}</td>
-    </tr>`;
-  }).join('')}</tbody></table></div>`;
+    const plPctColor=h.pct>=0?'var(--green)':'var(--red)';
+    const plDivColor=plDiv>=0?'var(--green)':'var(--red)';
+    return '<tr><td style="color:var(--text3)">'+(i+1)+'</td><td><b>'+h.ticker+'</b></td><td style="color:var(--text2)">'+h.name+'</td><td>'+portPct+'%</td><td class="r">'+h.shares.toLocaleString(undefined,{maximumFractionDigits:4})+'</td><td class="r">'+h.currency+' '+((h.avg||0)*(FX[h.currency]||1)).toFixed(4)+'</td><td class="r">'+costY+'%</td><td class="r">'+currY+'%</td><td class="r">'+((h.price||0)*(FX[h.currency]||1)).toFixed(3)+'</td><td>'+h.currency+'</td><td class="r">'+fmt(h.totalCostUSD)+'</td><td class="r"><span class="badge '+(h.pct>=0?'badge-green':'badge-red')+'">'+(h.pct>=0?'+':'')+h.pct.toFixed(2)+'%</span></td><td class="r">'+divPct+'%</td><td class="r" style="color:'+plDivColor+';font-weight:600">'+(plDiv>=0?'+':'')+fmt(plDiv)+'</td></tr>';
+  }).join('')+'</tbody></table></div>';
 }
 
 function renderTransactions(){
   const search=(document.getElementById('txSearch')||{value:''}).value.toLowerCase();
   const fa=(document.getElementById('txFilterAction')||{value:''}).value;
-  const sorted=[...transactions].sort((a,b)=>new Date(b.date)-new Date(a.date));
-  const filtered=sorted.filter(tx=>(!search||tx.ticker.toLowerCase().includes(search)||(tx.name||'').toLowerCase().includes(search))&&(!fa||tx.action===fa));
-  document.getElementById('txCount').textContent=`(${transactions.length})`;
+  const sorted=[...transactions].sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+  const filtered=sorted.filter(function(tx){return(!search||tx.ticker.toLowerCase().includes(search)||(tx.name||'').toLowerCase().includes(search))&&(!fa||tx.action===fa);});
+  document.getElementById('txCount').textContent='('+transactions.length+')';
   const total=filtered.length,pages=Math.max(1,Math.ceil(total/PER));
   if(txPage>pages)txPage=1;
   const slice=filtered.slice((txPage-1)*PER,txPage*PER);
   const body=document.getElementById('txBody'),empty=document.getElementById('txEmpty');
-  if(!transactions.length){body.innerHTML='';empty.style.display='block';renderPager('txPager',0,0,0,()=>{});return;}
+  if(!transactions.length){body.innerHTML='';empty.style.display='block';renderPager('txPager',0,0,0,function(){});return;}
   empty.style.display='none';
-  body.innerHTML=slice.map(tx=>{
+  body.innerHTML=slice.map(function(tx){
     const oi=transactions.indexOf(tx);
     const tot=tx.totalAfterFees||(tx.shares||0)*(tx.price||0)+(tx.fees||0);
-    return`<tr>
-      <td><span class="badge badge-cyan">${tx.exchange||'—'}</span></td>
-      <td><b>${tx.ticker}</b></td>
-      <td style="color:var(--text2);max-width:140px;overflow:hidden;text-overflow:ellipsis">${tx.name||'—'}</td>
-      <td><span style="font-weight:700;color:${tx.action==='Buy'?'var(--green)':tx.action==='Sell'?'var(--red)':'var(--amber)'}">${tx.action.toUpperCase()}</span></td>
-      <td style="color:var(--text2)">${tx.date||'—'}</td>
-      <td>${tx.currency||'—'}</td>
-      <td class="r">${(tx.shares||0).toLocaleString(undefined,{maximumFractionDigits:4})}</td>
-      <td class="r">${(tx.price||0).toFixed(4)}</td>
-      <td class="r">${tx.fees>0?tx.fees.toFixed(2):'—'}</td>
-      <td class="r">${tot.toFixed(2)}</td>
-      <td style="color:var(--text3);font-size:12px;max-width:110px;overflow:hidden;text-overflow:ellipsis">${tx.notes||'—'}</td>
-      <td class="c" style="white-space:nowrap">
-        <button class="btn btn-ghost btn-sm" onclick="editTxOpen(${oi})">✎</button>
-        <button class="btn btn-ghost btn-sm" onclick="dupTx(${oi})">⧉</button>
-        <button class="btn btn-danger btn-sm" onclick="delTx(${oi})">🗑</button>
-      </td></tr>`;
+    const ac=tx.action==='Buy'?'var(--green)':tx.action==='Sell'?'var(--red)':'var(--amber)';
+    return '<tr><td><span class="badge badge-cyan">'+(tx.exchange||'--')+'</span></td><td><b>'+tx.ticker+'</b></td><td style="color:var(--text2);max-width:140px;overflow:hidden;text-overflow:ellipsis">'+(tx.name||'--')+'</td><td><span style="font-weight:700;color:'+ac+'">'+tx.action.toUpperCase()+'</span></td><td style="color:var(--text2)">'+(tx.date||'--')+'</td><td>'+(tx.currency||'--')+'</td><td class="r">'+((tx.shares||0).toLocaleString(undefined,{maximumFractionDigits:4}))+'</td><td class="r">'+((tx.price||0).toFixed(4))+'</td><td class="r">'+(tx.fees>0?tx.fees.toFixed(2):'--')+'</td><td class="r">'+tot.toFixed(2)+'</td><td style="color:var(--text3);font-size:12px;max-width:110px;overflow:hidden;text-overflow:ellipsis">'+(tx.notes||'--')+'</td><td class="c" style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="editTxOpen('+oi+')">Edit</button> <button class="btn btn-ghost btn-sm" onclick="dupTx('+oi+')">Copy</button> <button class="btn btn-danger btn-sm" onclick="delTx('+oi+')">Del</button></td></tr>';
   }).join('');
-  renderPager('txPager',txPage,pages,total,p=>{txPage=p;renderTransactions();});
+  renderPager('txPager',txPage,pages,total,function(p){txPage=p;renderTransactions();});
 }
 
 function renderCashBalances(){
   const bal=cashBalances();
   const el=document.getElementById('cashBalRow');
   el.innerHTML=Object.keys(bal).length
-    ?Object.entries(bal).map(([cur,amt])=>`<div class="bal-pill"><span class="cur">${cur}</span><span class="amt">${amt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>`).join('')
-    :'<span style="color:var(--text3)">No cash accounts yet.</span>';
+    ?Object.entries(bal).map(function(e){return '<div class="bal-pill"><span class="cur">'+e[0]+'</span><span class="amt">'+e[1].toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></div>';}).join('')
+    :'<span style="color:var(--text3)">No cash transactions yet.</span>';
   const tc=totalCashUSD();
-  const tin=cashTxList.filter(t=>['DEPOSIT','DIVIDEND','SELL'].includes((t.type||'').toUpperCase())).reduce((s,t)=>s+toUSD(parseFloat(t.amount)||0,t.currency||'SGD'),0);
-  const tout=cashTxList.filter(t=>['WITHDRAWAL','BUY'].includes((t.type||'').toUpperCase())).reduce((s,t)=>s+toUSD(parseFloat(t.amount)||0,t.currency||'SGD'),0);
-  document.getElementById('cashMetrics').innerHTML=`
-    <div class="metric m-amber"><div class="metric-label">Total Cash</div><div class="metric-value">${fmt(tc)}</div></div>
-    <div class="metric m-green"><div class="metric-label">Total Deposits</div><div class="metric-value pos">+${fmt(tin)}</div></div>
-    <div class="metric m-red"><div class="metric-label">Withdrawals</div><div class="metric-value neg">-${fmt(tout)}</div></div>
-    <div class="metric m-cyan"><div class="metric-label">Net Flow</div><div class="metric-value ${tin-tout>=0?'pos':'neg'}">${tin-tout>=0?'+':''}${fmt(tin-tout)}</div></div>`;
+  const tin=cashTxList.filter(function(t){return['DEPOSIT','DIVIDEND','SELL'].includes((t.type||'').toUpperCase());}).reduce(function(s,t){return s+toUSD(parseFloat(t.amount)||0,t.currency||'SGD');},0);
+  const tout=cashTxList.filter(function(t){return['WITHDRAWAL','BUY'].includes((t.type||'').toUpperCase());}).reduce(function(s,t){return s+toUSD(parseFloat(t.amount)||0,t.currency||'SGD');},0);
+  document.getElementById('cashMetrics').innerHTML='<div class="metric m-amber"><div class="metric-label">Total Cash</div><div class="metric-value">'+fmt(tc)+'</div></div><div class="metric m-green"><div class="metric-label">Total Deposits</div><div class="metric-value pos">+'+fmt(tin)+'</div></div><div class="metric m-red"><div class="metric-label">Withdrawals</div><div class="metric-value neg">-'+fmt(tout)+'</div></div><div class="metric m-cyan"><div class="metric-label">Net Flow</div><div class="metric-value '+(tin-tout>=0?'pos':'neg')+'">'+(tin-tout>=0?'+':'')+fmt(tin-tout)+'</div></div>';
 }
 
 function renderCashTx(){
   const ft=(document.getElementById('cashTxFilterType')||{value:''}).value;
-  const sorted=[...cashTxList].sort((a,b)=>new Date(b.date)-new Date(a.date));
-  const filtered=sorted.filter(ct=>!ft||(ct.type||'').toUpperCase()===ft.toUpperCase());
-  document.getElementById('cashTxCount').textContent=`(${cashTxList.length})`;
+  const sorted=[...cashTxList].sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+  const filtered=sorted.filter(function(ct){return !ft||(ct.type||'').toUpperCase()===ft.toUpperCase();});
+  document.getElementById('cashTxCount').textContent='('+cashTxList.length+')';
   const total=filtered.length,pages=Math.max(1,Math.ceil(total/PER));
   if(cashPage>pages)cashPage=1;
   const slice=filtered.slice((cashPage-1)*PER,cashPage*PER);
   const body=document.getElementById('cashTxBody'),empty=document.getElementById('cashTxEmpty');
-  if(!cashTxList.length){body.innerHTML='';empty.style.display='block';renderPager('cashPager',0,0,0,()=>{});return;}
+  if(!cashTxList.length){body.innerHTML='';empty.style.display='block';renderPager('cashPager',0,0,0,function(){});return;}
   empty.style.display='none';
-  body.innerHTML=slice.map(ct=>{
+  body.innerHTML=slice.map(function(ct){
     const oi=cashTxList.indexOf(ct);
     const t=(ct.type||'').toUpperCase();
-    const cls=t==='DIVIDEND'?'type-div':t==='DEPOSIT'?'type-dep':t==='WITHDRAWAL'?'type-with':t==='BUY'?'type-buy':t==='SELL'?'type-sell':'type-exch';
+    var cls='type-exch';
+    if(t==='DIVIDEND')cls='type-div';
+    else if(t==='DEPOSIT')cls='type-dep';
+    else if(t==='WITHDRAWAL')cls='type-with';
+    else if(t==='BUY')cls='type-buy';
+    else if(t==='SELL')cls='type-sell';
     const a=parseFloat(ct.amount)||0;
     const sign=['WITHDRAWAL','BUY'].includes(t)?'-':'+';
-    return`<tr>
-      <td><span class="${cls}">${t}</span></td>
-      <td style="color:var(--text2)">${ct.date||'—'}</td>
-      <td class="r" style="font-weight:600"><span class="${cls}">${sign}${ct.currency||''} ${a.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span></td>
-      <td style="color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;font-size:12px">${ct.details||ct.notes||'—'}</td>
-      <td><b>${ct.symbol||'—'}</b></td>
-      <td style="color:var(--text2);font-size:12px">${ct.stockName||'—'}</td>
-      <td><span class="badge badge-cyan">${ct.portfolio||'—'}</span></td>
-      <td class="c" style="white-space:nowrap">
-        <button class="btn btn-ghost btn-sm" onclick="editCashTxOpen(${oi})">✎</button>
-        <button class="btn btn-danger btn-sm" onclick="delCashTx(${oi})">🗑</button>
-      </td></tr>`;
+    return '<tr><td><span class="'+cls+'">'+t+'</span></td><td style="color:var(--text2)">'+(ct.date||'--')+'</td><td class="r" style="font-weight:600"><span class="'+cls+'">'+sign+(ct.currency||'')+' '+a.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></td><td style="color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;font-size:12px">'+(ct.details||ct.notes||'--')+'</td><td><b>'+(ct.symbol||'--')+'</b></td><td style="color:var(--text2);font-size:12px">'+(ct.stockName||'--')+'</td><td><span class="badge badge-cyan">'+(ct.portfolio||'--')+'</span></td><td class="c" style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="editCashTxOpen('+oi+')">Edit</button> <button class="btn btn-danger btn-sm" onclick="delCashTx('+oi+')">Del</button></td></tr>';
   }).join('');
-  renderPager('cashPager',cashPage,pages,total,p=>{cashPage=p;renderCashTx();});
+  renderPager('cashPager',cashPage,pages,total,function(p){cashPage=p;renderCashTx();});
 }
 
 function renderPager(id,page,pages,total,cb){
   const el=document.getElementById(id);
   if(pages<=1){el.innerHTML='';return;}
-  let h=`<button ${page<=1?'disabled':''} onclick="(${cb})(${page-1})">‹</button>`;
+  var h='<button '+(page<=1?'disabled':'')+' onclick="('+cb+')('+( page-1)+')">&#8249;</button>';
   const s=Math.max(1,page-2),e=Math.min(pages,page+2);
-  if(s>1)h+=`<button onclick="(${cb})(1)">1</button>${s>2?'<span class="pager-info">…</span>':''}`;
-  for(let p=s;p<=e;p++)h+=`<button class="${p===page?'active':''}" onclick="(${cb})(${p})">${p}</button>`;
-  if(e<pages)h+=`${e<pages-1?'<span class="pager-info">…</span>':''}<button onclick="(${cb})(${pages})">${pages}</button>`;
-  h+=`<button ${page>=pages?'disabled':''} onclick="(${cb})(${page+1})">›</button><span class="pager-info">${total} records</span>`;
+  if(s>1)h+='<button onclick="('+cb+')(1)">1</button>'+(s>2?'<span class="pager-info">...</span>':'');
+  for(var p=s;p<=e;p++)h+='<button class="'+(p===page?'active':'')+'" onclick="('+cb+')('+p+')">'+p+'</button>';
+  if(e<pages)h+=(e<pages-1?'<span class="pager-info">...</span>':'')+'<button onclick="('+cb+')('+pages+')">'+pages+'</button>';
+  h+='<button '+(page>=pages?'disabled':'')+' onclick="('+cb+')('+( page+1)+')">&#8250;</button><span class="pager-info">'+total+' records</span>';
   el.innerHTML=h;
 }
 
 function renderDivHistory(){
   document.getElementById('divHistBody').innerHTML=dividends.length
-    ?`<table class="tbl"><thead><tr><th>Date</th><th>Ticker</th><th>Name</th><th class="r">Amount</th></tr></thead><tbody>${[...dividends].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(d=>`<tr><td style="color:var(--text2)">${d.date}</td><td><b>${d.ticker}</b></td><td style="color:var(--text2)">${d.name||'—'}</td><td class="r pos">+${fmt(d.amount)}</td></tr>`).join('')}</tbody></table>`
-    :`<div style="color:var(--text3);padding:8px 0">No dividend records.</div>`;
+    ?'<table class="tbl"><thead><tr><th>Date</th><th>Ticker</th><th>Name</th><th class="r">Amount</th></tr></thead><tbody>'+[...dividends].sort(function(a,b){return new Date(b.date)-new Date(a.date);}).map(function(d){return '<tr><td style="color:var(--text2)">'+d.date+'</td><td><b>'+d.ticker+'</b></td><td style="color:var(--text2)">'+(d.name||'--')+'</td><td class="r pos">+'+fmt(d.amount)+'</td></tr>';}).join('')+'</tbody></table>'
+    :'<div style="color:var(--text3);padding:8px 0">No dividend records.</div>';
 }
 
 function renderDripSim(){
   const on=document.getElementById('dripToggle').checked;
   document.getElementById('dripSimBox').style.display=on?'block':'none';
-  if(on){const div=totalAnnDiv(),sh=openH().reduce((s,h)=>s+h.shares,0),ap=sh>0?totalMV()/sh:0;document.getElementById('dripShares').textContent=(div/ap).toFixed(2);document.getElementById('dripExtra').textContent=fmt((div/ap)*ap*0.025);}
+  if(on){const div=totalAnnDiv(),sh=openH().reduce(function(s,h){return s+h.shares;},0),ap=sh>0?totalMV()/sh:0;document.getElementById('dripShares').textContent=(div/ap).toFixed(2);document.getElementById('dripExtra').textContent=fmt((div/ap)*ap*0.025);}
 }
 
 function renderCalendar(){
   const now=new Date(),month=now.getMonth(),year=now.getFullYear();
-  document.getElementById('calTitle').textContent=`Dividend Calendar – ${now.toLocaleDateString('en',{month:'long',year:'numeric'})}`;
+  document.getElementById('calTitle').textContent='Dividend Calendar - '+now.toLocaleDateString('en',{month:'long',year:'numeric'});
   const fd=new Date(year,month,1).getDay(),dim=new Date(year,month+1,0).getDate();
   const ms=String(year)+'-'+String(month+1).padStart(2,'0');
-  const dd=dividends.filter(d=>d.date&&d.date.startsWith(ms)).map(d=>parseInt(d.date.slice(8,10)));
-  let h='';
-  for(let i=0;i<fd;i++)h+=`<div class="cal-day" style="background:transparent;border:none"></div>`;
+  const dd=dividends.filter(function(d){return d.date&&d.date.startsWith(ms);}).map(function(d){return parseInt(d.date.slice(8,10));});
+  var h='';
+  for(var i=0;i<fd;i++)h+='<div class="cal-day" style="background:transparent;border:none"></div>';
   const td=now.getDate();
-  for(let d=1;d<=dim;d++){const hp=dd.includes(d)&&d<td,hu=dd.includes(d)&&d>=td;h+=`<div class="cal-day ${hp?'has-div':hu?'upcoming':''}"><div style="font-size:11px;color:${d===td?'var(--amber)':'var(--text2)'};font-weight:${d===td?700:400}">${d}</div>${hp?`<div style="width:5px;height:5px;border-radius:50%;background:var(--accent);margin:1px auto 0"></div>`:hu?`<div style="width:5px;height:5px;border-radius:50%;background:var(--green);margin:1px auto 0"></div>`:''}</div>`;}
+  for(var d=1;d<=dim;d++){var hp=dd.includes(d)&&d<td,hu=dd.includes(d)&&d>=td;h+='<div class="cal-day '+(hp?'has-div':hu?'upcoming':'')+'"><div style="font-size:11px;color:'+(d===td?'var(--amber)':'var(--text2)')+';font-weight:'+(d===td?700:400)+'">'+d+'</div>'+(hp?'<div style="width:5px;height:5px;border-radius:50%;background:var(--accent);margin:1px auto 0"></div>':hu?'<div style="width:5px;height:5px;border-radius:50%;background:var(--green);margin:1px auto 0"></div>':'')+'</div>';}
   document.getElementById('calGrid').innerHTML=h;
 }
 
 function renderAnalyticsMetrics(){
   const mv=totalMV(),cost=totalCost(),pnl=totalPnL();
-  const beta=openH().length>0?(openH().reduce((s,h)=>s+(h.beta||1)*h.mv,0)/mv).toFixed(2):'N/A';
-  document.getElementById('analyticsMetrics').innerHTML=openH().length===0?`<div style="grid-column:1/-1;text-align:center;padding:14px;color:var(--text3)">Add holdings to see analytics.</div>`:`<div class="metric m-purple"><div class="metric-label">Beta</div><div class="metric-value">${beta}</div><div class="metric-sub">vs S&P 500</div></div><div class="metric m-cyan"><div class="metric-label">Est. XIRR</div><div class="metric-value pos">${cost>0?'+'+(pnl/cost*100*0.7).toFixed(1):0}%</div></div><div class="metric m-green"><div class="metric-label">Sharpe</div><div class="metric-value">1.24</div></div><div class="metric m-amber"><div class="metric-label">VaR (5%)</div><div class="metric-value neg">-${fmt(mv*0.024)}</div></div>`;
+  const beta=openH().length>0?(openH().reduce(function(s,h){return s+(h.beta||1)*h.mv;},0)/mv).toFixed(2):'N/A';
+  document.getElementById('analyticsMetrics').innerHTML=openH().length===0?'<div style="grid-column:1/-1;text-align:center;padding:14px;color:var(--text3)">Add holdings to see analytics.</div>'
+    :'<div class="metric m-purple"><div class="metric-label">Beta</div><div class="metric-value">'+beta+'</div><div class="metric-sub">vs S&P 500</div></div><div class="metric m-cyan"><div class="metric-label">Est. XIRR</div><div class="metric-value pos">'+(cost>0?'+'+(pnl/cost*100*0.7).toFixed(1):0)+'%</div></div><div class="metric m-green"><div class="metric-label">Sharpe</div><div class="metric-value">1.24</div></div><div class="metric m-amber"><div class="metric-label">VaR (5%)</div><div class="metric-value neg">-'+fmt(mv*0.024)+'</div></div>';
 }
 
 function renderRiskMetrics(){
-  const mv=totalMV(),beta=openH().length>0?(openH().reduce((s,h)=>s+(h.beta||1)*h.mv,0)/mv).toFixed(2):'N/A';
-  document.getElementById('riskMetrics').innerHTML=[['Beta',beta,'vs market 1.0'],['VaR (5%)',openH().length?'-'+fmt(mv*0.024):'—','Max expected loss'],['Sharpe','1.24','Risk-adj return'],['Max Drawdown','-18.4%','Historical']].map(([k,v,s])=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)"><div><div>${k}</div><div style="font-size:12px;color:var(--text3)">${s}</div></div><div style="font-weight:600">${v}</div></div>`).join('');
+  const mv=totalMV(),beta=openH().length>0?(openH().reduce(function(s,h){return s+(h.beta||1)*h.mv;},0)/mv).toFixed(2):'N/A';
+  document.getElementById('riskMetrics').innerHTML=[['Beta',beta,'vs market 1.0'],['VaR (5%)',openH().length?'-'+fmt(mv*0.024):'--','Max expected loss'],['Sharpe','1.24','Risk-adj return'],['Max Drawdown','-18.4%','Historical']].map(function(x){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)"><div><div>'+x[0]+'</div><div style="font-size:12px;color:var(--text3)">'+x[2]+'</div></div><div style="font-weight:600">'+x[1]+'</div></div>';}).join('');
 }
 
 function renderGeoList(){
-  const geo={};openH().forEach(h=>{geo[h.geo]=(geo[h.geo]||0)+h.mv;});
+  const geo={};openH().forEach(function(h){geo[h.geo]=(geo[h.geo]||0)+h.mv;});
   const tot=totalMV(),cols={US:'#6c63ff',SG:'#00d2ff',HK:'#ff5c7a',GB:'#20e3b2',JP:'#ffb347',EU:'#ff6eb4',AU:'#9ba3c0'};
-  document.getElementById('geoList').innerHTML=Object.keys(geo).length?Object.entries(geo).sort((a,b)=>b[1]-a[1]).map(([g,v])=>{const pct=Math.round(v/tot*100);return`<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span>${g}</span><span style="font-weight:600">${pct}%</span></div><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${cols[g]||'#9ba3c0'}"></div></div></div>`;}).join(''):'<div style="color:var(--text3)">No holdings.</div>';
+  document.getElementById('geoList').innerHTML=Object.keys(geo).length?Object.entries(geo).sort(function(a,b){return b[1]-a[1];}).map(function(e){const pct=Math.round(e[1]/tot*100);return '<div style="margin-bottom:9px"><div style="display:flex;justify-content:space-between;margin-bottom:3px"><span>'+e[0]+'</span><span style="font-weight:600">'+pct+'%</span></div><div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%;background:'+(cols[e[0]]||'#9ba3c0')+'"></div></div></div>';}).join(''):'<div style="color:var(--text3)">No holdings.</div>';
 }
 
 function renderXirr(){
   const mv=totalMV(),cost=totalCost(),pnl=totalPnL(),ret=cost>0?(pnl/cost*100).toFixed(1):'0.0';
-  document.getElementById('xirrBox').innerHTML=[['Total Return',(pnl>=0?'+':'')+ret+'%','Since inception'],['XIRR (est.)',cost>0?'+'+(pnl/cost*100*0.7).toFixed(1)+'%':'—','Annualized'],['Div CAGR',dividends.length>0?'+8.3%':'—','Compound growth'],['vs S&P 500',pnl>=0?'+3.6%':'-1.2%','YTD']].map(([k,v,s])=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)"><div><div>${k}</div><div style="font-size:12px;color:var(--text3)">${s}</div></div><div style="font-weight:600;color:${v.startsWith('+')?'var(--green)':v.startsWith('-')?'var(--red)':'var(--text)'}">${v}</div></div>`).join('');
+  document.getElementById('xirrBox').innerHTML=[['Total Return',(pnl>=0?'+':'')+ret+'%','Since inception'],['XIRR (est.)',cost>0?'+'+(pnl/cost*100*0.7).toFixed(1)+'%':'--','Annualized'],['Div CAGR',dividends.length>0?'+8.3%':'--','Compound growth'],['vs S&P 500',pnl>=0?'+3.6%':'-1.2%','YTD']].map(function(x){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)"><div><div>'+x[0]+'</div><div style="font-size:12px;color:var(--text3)">'+x[2]+'</div></div><div style="font-weight:600;color:'+(x[1].charAt(0)==='+' ?'var(--green)':x[1].charAt(0)==='-'?'var(--red)':'var(--text)')+'">'+x[1]+'</div></div>';}).join('');
 }
 
 function renderWatchlist(){
-  document.getElementById('watchlistItems').innerHTML=watchlist.length?watchlist.map((w,i)=>`<div style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:8px"><div style="font-weight:700;min-width:60px">${w.ticker}</div><div style="flex:1;font-size:13px;color:var(--text2)">${w.name}</div><div style="text-align:right"><div style="font-weight:600">${w.price>0?'$'+w.price.toFixed(2):'—'}</div><div style="font-size:12px;${w.chg>=0?'color:var(--green)':'color:var(--red)'}">${w.price>0?(w.chg>=0?'+':'')+w.chg.toFixed(2)+' ('+w.pct.toFixed(2)+'%)':'pending'}</div></div><button class="btn btn-ghost btn-sm" onclick="watchlist.splice(${i},1);renderWatchlist()">×</button></div>`).join(''):`<div style="color:var(--text3);padding:8px 0">No stocks in watchlist.</div>`;
+  document.getElementById('watchlistItems').innerHTML=watchlist.length?watchlist.map(function(w,i){return '<div style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:8px"><div style="font-weight:700;min-width:60px">'+w.ticker+'</div><div style="flex:1;font-size:13px;color:var(--text2)">'+w.name+'</div><div style="text-align:right"><div style="font-weight:600">'+(w.price>0?'$'+w.price.toFixed(2):'--')+'</div><div style="font-size:12px;'+(w.chg>=0?'color:var(--green)':'color:var(--red)')+'">'+( w.price>0?(w.chg>=0?'+':'')+w.chg.toFixed(2)+' ('+w.pct.toFixed(2)+'%)':'pending')+'</div></div><button class="btn btn-danger btn-sm" onclick="watchlist.splice('+i+',1);renderWatchlist()">Del</button></div>';}).join(''):'<div style="color:var(--text3);padding:8px 0">No stocks in watchlist.</div>';
 }
 
 function renderAlerts(){
-  document.getElementById('alertsList').innerHTML=alerts.length?alerts.map((a,i)=>`<div style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:7px"><div style="flex:1"><b>${a.ticker}</b> <span style="color:var(--text3);font-size:12px">${a.cond} $${a.target}</span></div><span class="badge ${a.triggered?'badge-green':'badge-amber'}">${a.triggered?'Triggered':'Active'}</span><button class="btn btn-ghost btn-sm" onclick="alerts.splice(${i},1);renderAlerts()">×</button></div>`).join(''):`<div style="color:var(--text3);padding:8px 0">No alerts set.</div>`;
+  document.getElementById('alertsList').innerHTML=alerts.length?alerts.map(function(a,i){return '<div style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);gap:7px"><div style="flex:1"><b>'+a.ticker+'</b> <span style="color:var(--text3);font-size:12px">'+a.cond+' $'+a.target+'</span></div><span class="badge '+(a.triggered?'badge-green':'badge-amber')+'">'+(a.triggered?'Triggered':'Active')+'</span><button class="btn btn-danger btn-sm" onclick="alerts.splice('+i+',1);renderAlerts()">Del</button></div>';}).join(''):'<div style="color:var(--text3);padding:8px 0">No alerts set.</div>';
 }
 
 // ===================== INTERACTIONS =====================
-function showPage(id,btn){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));document.getElementById(id).classList.add('active');btn.classList.add('active');}
-function setHoldingView(v,btn){holdingView=v;document.querySelectorAll('.pos-neg-tab button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderHoldings();}
+function showPage(id,btn){document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});document.querySelectorAll('.nav-tab').forEach(function(t){t.classList.remove('active');});document.getElementById(id).classList.add('active');btn.classList.add('active');}
+function setHoldingView(v,btn){holdingView=v;document.querySelectorAll('.pos-neg-tab button').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');renderHoldings();}
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
-function showToast(msg,bg='#0d1f10'){const b=document.getElementById('toast');b.textContent=msg;b.style.background=bg;b.style.color=bg==='#0d1f10'?'var(--green)':'var(--red)';b.style.borderColor=bg==='#0d1f10'?'#00c89633':'#ff5c7a44';b.style.display='block';setTimeout(()=>b.style.display='none',3000);}
-function settingsTab(id,btn){['fbConfig','fbGuide'].forEach(i=>document.getElementById(i).style.display='none');document.getElementById(id).style.display='block';document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+function showToast(msg,bg){bg=bg||'#0d1f10';const b=document.getElementById('toast');b.textContent=msg;b.style.background=bg;b.style.color=bg==='#0d1f10'?'var(--green)':'var(--red)';b.style.borderColor=bg==='#0d1f10'?'#00c89633':'#ff5c7a44';b.style.display='block';setTimeout(function(){b.style.display='none';},3000);}
+function settingsTab(id,btn){document.getElementById('fbConfig').style.display='none';document.getElementById('fbGuide').style.display='none';document.getElementById(id).style.display='block';document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');}
 
-function openAddTx(){curTxAction='Buy';document.querySelectorAll('#actionRow .action-btn').forEach(b=>b.classList.remove('active'));document.querySelector('#actionRow .buy').classList.add('active');['txTicker','txName','txShares','txPrice','txFees','txNotes','txTotal'].forEach(id=>document.getElementById(id).value='');document.getElementById('txDate').value=today();openModal('addTxModal');}
-function setAction(a,btn){curTxAction=a;document.querySelectorAll('#actionRow .action-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
-function setEditAction(a,btn){curEditAction=a;document.querySelectorAll('#editActionRow .action-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+function openAddTx(){curTxAction='Buy';document.querySelectorAll('#actionRow .action-btn').forEach(function(b){b.classList.remove('active');});document.querySelector('#actionRow .buy').classList.add('active');['txTicker','txName','txShares','txPrice','txFees','txNotes','txTotal'].forEach(function(id){document.getElementById(id).value='';});document.getElementById('txDate').value=today();openModal('addTxModal');}
+function setAction(a,btn){curTxAction=a;document.querySelectorAll('#actionRow .action-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');}
+function setEditAction(a,btn){curEditAction=a;document.querySelectorAll('#editActionRow .action-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');}
 function setCashAction(a,btn){
   curCashAction=a;
-  document.querySelectorAll('#cashActionRow .action-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');
+  document.querySelectorAll('#cashActionRow .action-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');
   document.getElementById('ctDivFields').style.display=a==='DIVIDEND'?'block':'none';
 }
 function openAddCashTx(){
   curCashAction='DEPOSIT';
-  document.querySelectorAll('#cashActionRow .action-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('#cashActionRow .action-btn').forEach(function(b){b.classList.remove('active');});
   document.querySelector('#cashActionRow .dep').classList.add('active');
   document.getElementById('ctDate').value=today();
   document.getElementById('ctDivFields').style.display='none';
-  ['ctAmount','ctNotes'].forEach(id=>document.getElementById(id).value='');
-  ['ctSymbol','ctStockName'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['ctAmount','ctNotes'].forEach(function(id){document.getElementById(id).value='';});
+  var cs=document.getElementById('ctSymbol');if(cs)cs.value='';
+  var cn=document.getElementById('ctStockName');if(cn)cn.value='';
   openModal('addCashTxModal');
 }
 function autoFillExchange(){const v=document.getElementById('txTicker').value;if(v.includes(':'))document.getElementById('txExchange').value=v.split(':')[0].toUpperCase();}
@@ -977,20 +1001,20 @@ function addTransaction(){
   const notes=document.getElementById('txNotes').value;
   if(!ticker){showToast('Enter a ticker','#2e1a1a');return;}
   const total=parseFloat(document.getElementById('txTotal').value)||shares*price+fees;
-  transactions.push({action:curTxAction,exchange,ticker,name,shares,price,fees,currency,date,notes,totalAfterFees:total});
+  transactions.push({action:curTxAction,exchange:exchange,ticker:ticker,name:name,shares:shares,price:price,fees:fees,currency:currency,date:date,notes:notes,totalAfterFees:total});
   if(document.getElementById('chkCash').checked){
     const t=curTxAction==='Sell'?'SELL':'BUY';
-    cashTxList.push({type:t,date,currency,amount:total,details:`${curTxAction} ${shares} shares of ${name} @ ${currency}${price}`,symbol:ticker,stockName:name,portfolio:exchange});
+    cashTxList.push({type:t,date:date,currency:currency,amount:total,details:curTxAction+' '+shares+' shares of '+name+' @ '+currency+price,symbol:ticker,stockName:name,portfolio:exchange});
   }
-  closeModal('addTxModal');renderAll();saveToFirebase();showToast(`${curTxAction} recorded: ${ticker}`);
+  closeModal('addTxModal');renderAll();saveToFirebase();showToast(curTxAction+' recorded: '+ticker);
 }
 
 function editTxOpen(idx){
   const tx=transactions[idx];if(!tx)return;
   curEditAction=tx.action;
   document.getElementById('editTxIdx').value=idx;
-  document.querySelectorAll('#editActionRow .action-btn').forEach(b=>b.classList.remove('active'));
-  const el=document.querySelector(`#editActionRow .${tx.action.toLowerCase()}`);if(el)el.classList.add('active');
+  document.querySelectorAll('#editActionRow .action-btn').forEach(function(b){b.classList.remove('active');});
+  const el=document.querySelector('#editActionRow .'+tx.action.toLowerCase());if(el)el.classList.add('active');
   document.getElementById('eTicker').value=tx.ticker;document.getElementById('eName').value=tx.name||'';
   document.getElementById('eDate').value=tx.date||'';document.getElementById('eExchange').value=tx.exchange||'SGX';
   document.getElementById('eShares').value=tx.shares||'';document.getElementById('ePrice').value=tx.price||'';
@@ -1001,11 +1025,11 @@ function editTxOpen(idx){
 function saveEditTx(){
   const idx=parseInt(document.getElementById('editTxIdx').value);if(isNaN(idx))return;
   const shares=parseFloat(document.getElementById('eShares').value)||0,price=parseFloat(document.getElementById('ePrice').value)||0,fees=parseFloat(document.getElementById('eFees').value)||0;
-  transactions[idx]={...transactions[idx],action:curEditAction,ticker:document.getElementById('eTicker').value.toUpperCase().trim(),name:document.getElementById('eName').value,date:document.getElementById('eDate').value,exchange:document.getElementById('eExchange').value,shares,price,fees,currency:document.getElementById('eCurrency').value,notes:document.getElementById('eNotes').value,totalAfterFees:parseFloat(document.getElementById('eTotal').value)||shares*price+fees};
+  transactions[idx]=Object.assign({},transactions[idx],{action:curEditAction,ticker:document.getElementById('eTicker').value.toUpperCase().trim(),name:document.getElementById('eName').value,date:document.getElementById('eDate').value,exchange:document.getElementById('eExchange').value,shares:shares,price:price,fees:fees,currency:document.getElementById('eCurrency').value,notes:document.getElementById('eNotes').value,totalAfterFees:parseFloat(document.getElementById('eTotal').value)||shares*price+fees});
   closeModal('editTxModal');renderAll();saveToFirebase();showToast('Transaction updated');
 }
 function delTx(idx){if(!confirm('Delete this transaction?'))return;transactions.splice(idx,1);renderAll();saveToFirebase();showToast('Deleted');}
-function dupTx(idx){transactions.push({...transactions[idx],date:today()});renderAll();saveToFirebase();showToast('Duplicated');}
+function dupTx(idx){transactions.push(Object.assign({},transactions[idx],{date:today()}));renderAll();saveToFirebase();showToast('Duplicated');}
 
 function addCashTx(){
   const amount=parseFloat(document.getElementById('ctAmount').value);
@@ -1016,15 +1040,14 @@ function addCashTx(){
   const notes=document.getElementById('ctNotes').value;
   const symbol=curCashAction==='DIVIDEND'?(document.getElementById('ctSymbol').value||''):'';
   const stockName=curCashAction==='DIVIDEND'?(document.getElementById('ctStockName').value||''):'';
-  const details=curCashAction==='DIVIDEND'&&symbol?`Dividend payout from ${stockName||symbol}`:notes;
-  const ct={type:curCashAction,date,currency,amount,details,symbol,stockName,portfolio,notes};
-  cashTxList.push(ct);
-  // If dividend, also add to dividends list
+  const details=curCashAction==='DIVIDEND'&&symbol?'Dividend payout from '+(stockName||symbol):notes;
+  cashTxList.push({type:curCashAction,date:date,currency:currency,amount:amount,details:details,symbol:symbol,stockName:stockName,portfolio:portfolio,notes:notes});
   if(curCashAction==='DIVIDEND'&&symbol&&amount>0){
     const amtUSD=toUSD(amount,currency);
-    const key=`DIV_${symbol}_${date}_${amtUSD.toFixed(4)}`;
-    const exists=dividends.some(d=>d._key===key);
-    if(!exists)dividends.push({_key:key,ticker:symbol,name:stockName||symbol,amount:amtUSD,date,type:'Dividend'});
+    const key='DIV_'+symbol+'_'+date+'_'+amtUSD.toFixed(4);
+    if(!dividends.some(function(d){return d._key===key;})){
+      dividends.push({_key:key,ticker:symbol,name:stockName||symbol,amount:amtUSD,date:date,type:'Dividend'});
+    }
   }
   closeModal('addCashTxModal');renderAll();updateDivChart();saveToFirebase();showToast('Cash transaction added');
 }
@@ -1044,55 +1067,53 @@ function editCashTxOpen(idx){
 }
 function saveEditCashTx(){
   const idx=parseInt(document.getElementById('editCashIdx').value);if(isNaN(idx))return;
-  cashTxList[idx]={...cashTxList[idx],type:document.getElementById('ecType').value,date:document.getElementById('ecDate').value,currency:document.getElementById('ecCurrency').value,amount:parseFloat(document.getElementById('ecAmount').value)||0,symbol:document.getElementById('ecSymbol').value,stockName:document.getElementById('ecStockName').value,portfolio:document.getElementById('ecPortfolio').value,details:document.getElementById('ecDetails').value};
+  cashTxList[idx]=Object.assign({},cashTxList[idx],{type:document.getElementById('ecType').value,date:document.getElementById('ecDate').value,currency:document.getElementById('ecCurrency').value,amount:parseFloat(document.getElementById('ecAmount').value)||0,symbol:document.getElementById('ecSymbol').value,stockName:document.getElementById('ecStockName').value,portfolio:document.getElementById('ecPortfolio').value,details:document.getElementById('ecDetails').value});
   closeModal('editCashTxModal');renderCash();renderMetrics();saveToFirebase();showToast('Cash transaction updated');
 }
 function delCashTx(idx){if(!confirm('Delete this cash transaction?'))return;cashTxList.splice(idx,1);renderCash();renderMetrics();saveToFirebase();showToast('Deleted');}
 
 function addWatch(){const t=document.getElementById('wTicker').value.toUpperCase().trim();const n=document.getElementById('wName').value.trim();if(!t)return;watchlist.push({ticker:t,name:n||t,price:0,chg:0,pct:0});closeModal('addWatchModal');renderWatchlist();showToast(t+' added');}
-function addAlert(){const t=document.getElementById('alTicker').value.toUpperCase().trim();const cond=document.getElementById('alCond').value;const target=parseFloat(document.getElementById('alPrice').value);if(!t||!target)return;alerts.push({ticker:t,cond,target,triggered:false});closeModal('alertModal');renderAlerts();showToast('Alert set');}
+function addAlert(){const t=document.getElementById('alTicker').value.toUpperCase().trim();const cond=document.getElementById('alCond').value;const target=parseFloat(document.getElementById('alPrice').value);if(!t||!target)return;alerts.push({ticker:t,cond:cond,target:target,triggered:false});closeModal('alertModal');renderAlerts();showToast('Alert set');}
 
-// ===================== YAHOO FINANCE via corsproxy.io =====================
+// ===================== LIVE PRICES via corsproxy.io =====================
 async function refreshPrices(){
-  document.getElementById('syncStatus').textContent='⬤ Syncing…';
-  document.getElementById('yhStatus').textContent='Fetching prices via corsproxy.io…';
-  const tickers=[...new Set([...openH().map(h=>h.ticker),...watchlist.map(w=>w.ticker)])].slice(0,12);
-  let n=0;
-  for(const ticker of tickers){
+  document.getElementById('syncStatus').textContent='Syncing...';
+  document.getElementById('yhStatus').textContent='Fetching prices via corsproxy.io...';
+  const tickers=[...new Set([...openH().map(function(h){return h.ticker;}),... watchlist.map(function(w){return w.ticker;})])].slice(0,12);
+  var n=0;
+  for(var i=0;i<tickers.length;i++){
+    const ticker=tickers[i];
     try{
-      const url=`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=2d`;
-      const proxy=`https://corsproxy.io/?${encodeURIComponent(url)}`;
+      const url='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(ticker)+'?interval=1d&range=2d';
+      const proxy='https://corsproxy.io/?'+encodeURIComponent(url);
       const res=await fetch(proxy);
       if(res.ok){
         const data=await res.json();
-        const meta=data?.chart?.result?.[0]?.meta;
+        const meta=data&&data.chart&&data.chart.result&&data.chart.result[0]&&data.chart.result[0].meta;
         if(meta&&meta.regularMarketPrice>0){
           const price=meta.regularMarketPrice,prev=meta.previousClose||price;
-          const h=buildHoldings().find(x=>x.ticker===ticker);
-          if(h){
-            livePrices[ticker]=toUSD(price,h.currency);
-            n++;
-          }
-          const w=watchlist.find(x=>x.ticker===ticker);
+          const h=buildHoldings().find(function(x){return x.ticker===ticker;});
+          if(h){livePrices[ticker]=toUSD(price,h.currency);n++;}
+          const w=watchlist.find(function(x){return x.ticker===ticker;});
           if(w){w.price=price;w.chg=+(price-prev).toFixed(2);w.pct=prev>0?+((price-prev)/prev*100).toFixed(2):0;}
         }
       }
     }catch(e){}
-    await new Promise(r=>setTimeout(r,200));
+    await new Promise(function(r){setTimeout(r,200);});
   }
-  document.getElementById('syncStatus').textContent=n?`⬤ Live (${n})`:'⬤ Local';
-  document.getElementById('yhStatus').textContent=n?`✓ Updated ${n} prices`:'No prices — check tickers or proxy availability.';
-  renderAll();showToast(n?`${n} prices updated`:'Prices unchanged');
+  document.getElementById('syncStatus').textContent=n?'Live ('+n+')':'Local';
+  document.getElementById('yhStatus').textContent=n?'Updated '+n+' prices':'No prices returned. Check tickers.';
+  renderAll();showToast(n?n+' prices updated':'Prices unchanged');
 }
 
-// ===================== CSV IMPORT =====================
+// ===================== CSV =====================
 function importCSV(event){
   const file=event.target.files[0];if(!file)return;
-  Papa.parse(file,{header:false,dynamicTyping:false,skipEmptyLines:true,complete(results){
-    let rows=results.data;
+  Papa.parse(file,{header:false,dynamicTyping:false,skipEmptyLines:true,complete:function(results){
+    var rows=results.data;
     if(rows.length&&isNaN(parseFloat(rows[0][0])))rows=rows.slice(1);
-    let added=0;
-    rows.forEach(r=>{
+    var added=0;
+    rows.forEach(function(r){
       const action=parseInt(r[0]),exchange=String(r[1]||'').trim(),symbol=String(r[2]||'').trim().toUpperCase();
       const units=parseFloat(r[3])||0,price=parseFloat(r[4])||0,date=String(r[5]||'').trim();
       const currency=String(r[6]||'USD').trim(),totalAfter=parseFloat(r[8])||(units*price);
@@ -1100,52 +1121,90 @@ function importCSV(event){
       if(!symbol)return;
       const fees=Math.max(0,totalAfter-(units*price));
       const txAction=action===1?'Buy':action===-1?'Sell':'Fee';
-      transactions.push({action:txAction,exchange,ticker:symbol,name:label||symbol,shares:units,price,fees,currency,date,notes,totalAfterFees:totalAfter});
-      cashTxList.push({type:txAction==='Sell'?'SELL':'BUY',date,currency,amount:Math.abs(totalAfter),details:`${txAction} ${units} shares of ${label||symbol} @ ${currency}${price}`,symbol,stockName:label||symbol,portfolio:exchange});
+      transactions.push({action:txAction,exchange:exchange,ticker:symbol,name:label||symbol,shares:units,price:price,fees:fees,currency:currency,date:date,notes:notes,totalAfterFees:totalAfter});
+      cashTxList.push({type:txAction==='Sell'?'SELL':'BUY',date:date,currency:currency,amount:Math.abs(totalAfter),details:txAction+' '+units+' shares of '+(label||symbol)+' @ '+currency+price,symbol:symbol,stockName:label||symbol,portfolio:exchange});
       added++;
     });
-    renderAll();saveToFirebase();showToast(`Imported ${added} transactions`);event.target.value='';
-  },error(e){showToast('Parse error: '+e.message,'#2e1a1a');}});
+    renderAll();saveToFirebase();showToast('Imported '+added+' transactions');event.target.value='';
+  },error:function(e){showToast('Parse error: '+e.message,'#2e1a1a');}});
 }
 
 function importCashCSV(event){
   const file=event.target.files[0];if(!file)return;
-  Papa.parse(file,{header:false,dynamicTyping:false,skipEmptyLines:true,complete(results){
-    let rows=results.data;
+  Papa.parse(file,{header:false,dynamicTyping:false,skipEmptyLines:true,complete:function(results){
+    var rows=results.data;
     if(rows.length&&rows[0][0].toLowerCase()==='type')rows=rows.slice(1);
-    let added=0;
-    rows.forEach(r=>{
+    var added=0;
+    rows.forEach(function(r){
       const type=String(r[0]||'').trim().toUpperCase();
       const date=String(r[1]||'').trim(),currency=String(r[2]||'SGD').trim();
       const amount=parseFloat(r[3])||0,details=String(r[4]||'').trim();
       const symbol=String(r[5]||'').trim(),stockName=String(r[6]||'').trim(),portfolio=String(r[7]||'').trim();
       if(!type||!date)return;
-      cashTxList.push({type,date,currency,amount,details,symbol,stockName,portfolio});
+      cashTxList.push({type:type,date:date,currency:currency,amount:amount,details:details,symbol:symbol,stockName:stockName,portfolio:portfolio});
       if(type==='DIVIDEND'&&symbol&&amount>0){
         const amtUSD=toUSD(amount,currency);
-        const key=`DIV_${symbol}_${date}_${amtUSD.toFixed(4)}`;
-        if(!dividends.some(d=>d._key===key))dividends.push({_key:key,ticker:symbol,name:stockName||symbol,amount:amtUSD,date,type:'Dividend'});
+        const key='DIV_'+symbol+'_'+date+'_'+amtUSD.toFixed(4);
+        if(!dividends.some(function(d){return d._key===key;})){
+          dividends.push({_key:key,ticker:symbol,name:stockName||symbol,amount:amtUSD,date:date,type:'Dividend'});
+        }
       }
       added++;
     });
-    renderAll();updateDivChart();saveToFirebase();showToast(`Imported ${added} cash transactions`);event.target.value='';
-  },error(e){showToast('Parse error: '+e.message,'#2e1a1a');}});
+    renderAll();updateDivChart();saveToFirebase();showToast('Imported '+added+' cash transactions');event.target.value='';
+  },error:function(e){showToast('Parse error: '+e.message,'#2e1a1a');}});
 }
 
-// ===================== EXPORTS =====================
 function dl(csv,name){const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download=name;a.click();}
-function exportTxCSV(){if(!transactions.length){showToast('No transactions','#2e1a1a');return;}const rows=[['Action','Exchange','Symbol','Units','Price','Date','Currency','TotalBefore','TotalAfter','Label','Notes'],...transactions.map(t=>[t.action==='Buy'?1:t.action==='Sell'?-1:0,t.exchange,t.ticker,t.shares,t.price,t.date,t.currency,((t.shares||0)*(t.price||0)).toFixed(2),(t.totalAfterFees||0).toFixed(2),t.name||'',t.notes||''])];dl(rows.map(r=>r.map(v=>String(v).includes(',')?`"${v}"`:v).join(',')).join('\n'),'transactions.csv');showToast('Exported');}
-function exportCSV(){const h=openH();if(!h.length){showToast('No holdings','#2e1a1a');return;}const rows=[['Ticker','Name','Exchange','Geo','Currency','Shares','AvgCostUSD','PriceUSD','DivYield'],...h.map(x=>[x.ticker,x.name,x.exchange,x.geo,x.currency,x.shares.toFixed(4),(x.avg||0).toFixed(4),(x.price||0).toFixed(4),(x.divYield||0).toFixed(2)])];dl(rows.map(r=>r.map(v=>String(v).includes(',')?`"${v}"`:v).join(',')).join('\n'),'holdings.csv');showToast('Exported');}
-function exportCashCSV(){if(!cashTxList.length){showToast('No cash transactions','#2e1a1a');return;}const rows=[['Type','Date','Currency','Amount','Details','Symbol','StockName','Portfolio'],...cashTxList.map(ct=>[ct.type,ct.date,ct.currency,ct.amount,ct.details||'',ct.symbol||'',ct.stockName||'',ct.portfolio||''])];dl(rows.map(r=>r.map(v=>String(v).includes(',')?`"${v}"`:v).join(',')).join('\n'),'cash_transactions.csv');showToast('Exported');}
+function exportTxCSV(){
+  if(!transactions.length){showToast('No transactions','#2e1a1a');return;}
+  const rows=[['Action','Exchange','Symbol','Units','Price','Date','Currency','TotalBefore','TotalAfter','Label','Notes']].concat(transactions.map(function(t){return[t.action==='Buy'?1:t.action==='Sell'?-1:0,t.exchange,t.ticker,t.shares,t.price,t.date,t.currency,((t.shares||0)*(t.price||0)).toFixed(2),(t.totalAfterFees||0).toFixed(2),t.name||'',t.notes||''];}));
+  dl(rows.map(function(r){return r.map(function(v){return String(v).includes(',')?'"'+v+'"':v;}).join(',');}).join('\n'),'transactions.csv');showToast('Exported');
+}
+function exportCSV(){
+  const h=openH();if(!h.length){showToast('No holdings','#2e1a1a');return;}
+  const rows=[['Ticker','Name','Exchange','Geo','Currency','Shares','AvgCostUSD','PriceUSD','DivYield']].concat(h.map(function(x){return[x.ticker,x.name,x.exchange,x.geo,x.currency,x.shares.toFixed(4),(x.avg||0).toFixed(4),(x.price||0).toFixed(4),(x.divYield||0).toFixed(2)];}));
+  dl(rows.map(function(r){return r.map(function(v){return String(v).includes(',')?'"'+v+'"':v;}).join(',');}).join('\n'),'holdings.csv');showToast('Exported');
+}
+function exportCashCSV(){
+  if(!cashTxList.length){showToast('No cash transactions','#2e1a1a');return;}
+  const rows=[['Type','Date','Currency','Amount','Details','Symbol','StockName','Portfolio']].concat(cashTxList.map(function(ct){return[ct.type,ct.date,ct.currency,ct.amount,ct.details||'',ct.symbol||'',ct.stockName||'',ct.portfolio||''];}));
+  dl(rows.map(function(r){return r.map(function(v){return String(v).includes(',')?'"'+v+'"':v;}).join(',');}).join('\n'),'cash_transactions.csv');showToast('Exported');
+}
 
 // ===================== FIREBASE =====================
 function saveFirebaseConfig(){firebaseConfig={apiKey:document.getElementById('fbApiKey').value,databaseURL:document.getElementById('fbDbUrl').value};try{localStorage.setItem('piq_fb',JSON.stringify(firebaseConfig));}catch(e){}document.getElementById('fbStatus').textContent=firebaseConfig.databaseURL?'Config saved':'Not connected';}
-async function saveToFirebase(){if(!firebaseConfig.databaseURL)return;try{await fetch(firebaseConfig.databaseURL+'/portfolio.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({transactions,cashTxList,dividends,alerts,watchlist})});document.getElementById('syncStatus').textContent='⬤ Synced';}catch(e){}}
-async function loadFromFirebase(){if(!firebaseConfig.databaseURL){showToast('Set Firebase URL first','#2e1a1a');return;}try{const res=await fetch(firebaseConfig.databaseURL+'/portfolio.json');const data=await res.json();if(data){if(data.transactions)transactions=data.transactions;if(data.cashTxList)cashTxList=data.cashTxList;if(data.dividends)dividends=data.dividends;if(data.alerts)alerts=data.alerts;if(data.watchlist)watchlist=data.watchlist;renderAll();updateDivChart();document.getElementById('syncStatus').textContent='⬤ Loaded';showToast('Loaded from Firebase');}else showToast('No data in Firebase','#2e1a1a');}catch(e){showToast('Firebase load failed','#2e1a1a');}}
+async function saveToFirebase(){
+  if(!firebaseConfig.databaseURL)return;
+  try{await fetch(firebaseConfig.databaseURL+'/portfolio.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({transactions:transactions,cashTxList:cashTxList,dividends:dividends,alerts:alerts,watchlist:watchlist})});document.getElementById('syncStatus').textContent='Synced';}catch(e){}
+}
+async function loadFromFirebase(){
+  if(!firebaseConfig.databaseURL){showToast('Set Firebase URL first','#2e1a1a');return;}
+  try{
+    const res=await fetch(firebaseConfig.databaseURL+'/portfolio.json');
+    const data=await res.json();
+    if(data){
+      if(data.transactions)transactions=data.transactions;
+      if(data.cashTxList)cashTxList=data.cashTxList;
+      if(data.dividends)dividends=data.dividends;
+      if(data.alerts)alerts=data.alerts;
+      if(data.watchlist)watchlist=data.watchlist;
+      renderAll();updateDivChart();document.getElementById('syncStatus').textContent='Loaded';showToast('Loaded from Firebase');
+    }else showToast('No data in Firebase','#2e1a1a');
+  }catch(e){showToast('Firebase load failed','#2e1a1a');}
+}
 
 // ===================== EMAIL =====================
 function saveEmailConfig(){emailConfig={publicKey:document.getElementById('ejPublicKey').value,serviceId:document.getElementById('ejServiceId').value,templateId:document.getElementById('ejTemplateId').value,email:document.getElementById('ejEmail').value};try{localStorage.setItem('piq_email',JSON.stringify(emailConfig));}catch(e){}}
-async function sendDigest(){if(!emailConfig.publicKey){showToast('Fill EmailJS fields','#2e1a1a');return;}const mv=totalMV(),pnl=totalPnL(),div=totalAnnDiv(),cost=totalCost();try{const res=await fetch('https://api.emailjs.com/api/v1.0/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({service_id:emailConfig.serviceId,template_id:emailConfig.templateId,user_id:emailConfig.publicKey,template_params:{portfolio_value:fmt(mv),total_pnl:(pnl>=0?'+':'')+fmt(pnl),pnl_pct:(pnl>=0?'+':'')+((cost>0?pnl/cost*100:0).toFixed(2))+'%',annual_div:fmt(div),currency:baseCurrency,date:new Date().toLocaleDateString(),to_email:emailConfig.email}})});if(res.ok){document.getElementById('ejStatus').textContent='✓ Sent!';showToast('Digest sent');}else document.getElementById('ejStatus').textContent='Error '+res.status;}catch(e){document.getElementById('ejStatus').textContent='Error: '+e.message;}}
+async function sendDigest(){
+  if(!emailConfig.publicKey){showToast('Fill EmailJS fields','#2e1a1a');return;}
+  const mv=totalMV(),pnl=totalPnL(),div=totalAnnDiv(),cost=totalCost();
+  try{
+    const res=await fetch('https://api.emailjs.com/api/v1.0/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({service_id:emailConfig.serviceId,template_id:emailConfig.templateId,user_id:emailConfig.publicKey,template_params:{portfolio_value:fmt(mv),total_pnl:(pnl>=0?'+':'')+fmt(pnl),pnl_pct:(pnl>=0?'+':'')+((cost>0?pnl/cost*100:0).toFixed(2))+'%',annual_div:fmt(div),currency:baseCurrency,date:new Date().toLocaleDateString(),to_email:emailConfig.email}})});
+    if(res.ok){document.getElementById('ejStatus').textContent='Sent!';showToast('Digest sent');}
+    else document.getElementById('ejStatus').textContent='Error '+res.status;
+  }catch(e){document.getElementById('ejStatus').textContent='Error: '+e.message;}
+}
 
 // ===================== CURRENCY =====================
 function saveBaseCurrency(){baseCurrency=document.getElementById('baseCurrencySel').value;try{localStorage.setItem('piq_currency',baseCurrency);}catch(e){}renderAll();updateDivChart();showToast('Currency: '+baseCurrency);}
@@ -1156,8 +1215,7 @@ function clearAllData(){if(!confirm('Clear ALL data?'))return;transactions=[];ca
 // ===================== RENDER ALL =====================
 function renderCash(){renderCashBalances();renderCashTx();}
 function renderAll(){
-  // Sync all dividends to cash
-  dividends.forEach(d=>syncDivToCash(d));
+  dividends.forEach(function(d){syncDivToCash(d);});
   renderMetrics();renderTopHoldings();renderUpcomingDivs();
   renderTransactions();renderHoldings();renderCash();
   renderDivHistory();renderCalendar();renderDripSim();
@@ -1167,9 +1225,9 @@ function renderAll(){
 }
 
 // ===================== INIT =====================
-document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+document.querySelectorAll('.modal-bg').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('open');});});
 try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){document.getElementById('fbApiKey').value=fb.apiKey||'';document.getElementById('fbDbUrl').value=fb.databaseURL||'';firebaseConfig=fb;}}catch(e){}
-try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach((id,i)=>{const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
+try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
 initCharts();renderAll();updateDivChart();
 if(firebaseConfig.databaseURL)loadFromFirebase();

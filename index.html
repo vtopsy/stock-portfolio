@@ -825,7 +825,9 @@ function renderHoldings(){
     const plDiv=h.pnl+h.annDiv;
     const plPctColor=h.pct>=0?'var(--green)':'var(--red)';
     const plDivColor=plDiv>=0?'var(--green)':'var(--red)';
-    return '<tr><td style="color:var(--text3)">'+(i+1)+'</td><td><b>'+h.ticker+'</b></td><td style="color:var(--text2)">'+h.name+'</td><td>'+portPct+'%</td><td class="r">'+h.shares.toLocaleString(undefined,{maximumFractionDigits:4})+'</td><td class="r">'+h.currency+' '+((h.avg||0)*(FX[h.currency]||1)).toFixed(4)+'</td><td class="r">'+costY+'%</td><td class="r">'+currY+'%</td><td class="r">'+((h.price||0)*(FX[h.currency]||1)).toFixed(3)+'</td><td>'+h.currency+'</td><td class="r">'+fmt(h.totalCostUSD)+'</td><td class="r"><span class="badge '+(h.pct>=0?'badge-green':'badge-red')+'">'+(h.pct>=0?'+':'')+h.pct.toFixed(2)+'%</span></td><td class="r">'+divPct+'%</td><td class="r" style="color:'+plDivColor+';font-weight:600">'+(plDiv>=0?'+':'')+fmt(plDiv)+'</td></tr>';
+    const plDivPct=h.totalCostUSD>0?(plDiv/h.totalCostUSD*100):0;
+    const plDivPctColor=plDivPct>=0?'var(--green)':'var(--red)';
+    return '<tr><td style="color:var(--text3)">'+(i+1)+'</td><td><b>'+h.ticker+'</b></td><td style="color:var(--text2)">'+h.name+'</td><td>'+portPct+'%</td><td class="r">'+h.shares.toLocaleString(undefined,{maximumFractionDigits:4})+'</td><td class="r">'+h.currency+' '+((h.avg||0)*(FX[h.currency]||1)).toFixed(4)+'</td><td class="r">'+costY+'%</td><td class="r">'+currY+'%</td><td class="r">'+((h.price||0)*(FX[h.currency]||1)).toFixed(3)+'</td><td>'+h.currency+'</td><td class="r">'+fmt(h.totalCostUSD)+'</td><td class="r"><span class="badge '+(h.pct>=0?'badge-green':'badge-red')+'">'+(h.pct>=0?'+':'')+h.pct.toFixed(2)+'%</span></td><td class="r">'+divPct+'%</td><td class="r" style="color:'+plDivColor+';font-weight:600">'+(plDiv>=0?'+':'')+fmt(plDiv)+'</td><td class="r" style="color:'+plDivPctColor+';font-weight:600">'+(plDivPct>=0?'+':'')+plDivPct.toFixed(2)+'%</td></tr>';
   }).join('')+'</tbody></table></div>';
 }
 
@@ -1029,7 +1031,17 @@ function saveEditTx(){
   closeModal('editTxModal');renderAll();saveToFirebase();showToast('Transaction updated');
 }
 function delTx(idx){if(!confirm('Delete this transaction?'))return;transactions.splice(idx,1);renderAll();saveToFirebase();showToast('Deleted');}
-function dupTx(idx){transactions.push(Object.assign({},transactions[idx],{date:today()}));renderAll();saveToFirebase();showToast('Duplicated');}
+function dupTx(idx){
+  const src=transactions[idx];
+  const copy=Object.assign({},src,{date:today()});
+  transactions.push(copy);
+  // Also add corresponding cash entry
+  if(copy.action==='Buy'||copy.action==='Sell'){
+    const cashType=copy.action==='Sell'?'SELL':'BUY';
+    cashTxList.push({type:cashType,date:copy.date,currency:copy.currency,amount:copy.totalAfterFees||0,details:copy.action+' '+copy.shares+' shares of '+(copy.name||copy.ticker)+' @ '+(copy.currency||'')+copy.price,symbol:copy.ticker,stockName:copy.name||copy.ticker,portfolio:copy.exchange||''});
+  }
+  renderAll();saveToFirebase();showToast('Duplicated');
+}
 
 function addCashTx(){
   const amount=parseFloat(document.getElementById('ctAmount').value);
@@ -1041,13 +1053,24 @@ function addCashTx(){
   const symbol=curCashAction==='DIVIDEND'?(document.getElementById('ctSymbol').value||''):'';
   const stockName=curCashAction==='DIVIDEND'?(document.getElementById('ctStockName').value||''):'';
   const details=curCashAction==='DIVIDEND'&&symbol?'Dividend payout from '+(stockName||symbol):notes;
-  cashTxList.push({type:curCashAction,date:date,currency:currency,amount:amount,details:details,symbol:symbol,stockName:stockName,portfolio:portfolio,notes:notes});
+
   if(curCashAction==='DIVIDEND'&&symbol&&amount>0){
     const amtUSD=toUSD(amount,currency);
-    const key='DIV_'+symbol+'_'+date+'_'+amtUSD.toFixed(4);
-    if(!dividends.some(function(d){return d._key===key;})){
-      dividends.push({_key:key,ticker:symbol,name:stockName||symbol,amount:amtUSD,date:date,type:'Dividend'});
+    const divKey='DIV_'+symbol+'_'+date+'_'+amtUSD.toFixed(4);
+    // Check duplicate in dividends list
+    const divExists=dividends.some(function(d){return d._key===divKey;});
+    if(!divExists){
+      dividends.push({_key:divKey,ticker:symbol,name:stockName||symbol,amount:amtUSD,date:date,type:'Dividend'});
     }
+    // Check duplicate in cashTxList by same key
+    const cashExists=cashTxList.some(function(ct){return ct._key===divKey;});
+    if(!cashExists){
+      cashTxList.push({_key:divKey,type:'DIVIDEND',date:date,currency:currency,amount:amount,details:details,symbol:symbol,stockName:stockName,portfolio:portfolio,notes:notes});
+    } else {
+      showToast('Duplicate dividend entry skipped','#2e1a1a');
+    }
+  } else {
+    cashTxList.push({type:curCashAction,date:date,currency:currency,amount:amount,details:details,symbol:symbol,stockName:stockName,portfolio:portfolio,notes:notes});
   }
   closeModal('addCashTxModal');renderAll();updateDivChart();saveToFirebase();showToast('Cash transaction added');
 }

@@ -1035,10 +1035,19 @@ function dupTx(idx){
   const src=transactions[idx];
   const copy=Object.assign({},src,{date:today()});
   transactions.push(copy);
-  // Also add corresponding cash entry
   if(copy.action==='Buy'||copy.action==='Sell'){
     const cashType=copy.action==='Sell'?'SELL':'BUY';
-    cashTxList.push({type:cashType,date:copy.date,currency:copy.currency,amount:copy.totalAfterFees||0,details:copy.action+' '+copy.shares+' shares of '+(copy.name||copy.ticker)+' @ '+(copy.currency||'')+copy.price,symbol:copy.ticker,stockName:copy.name||copy.ticker,portfolio:copy.exchange||''});
+    const amt=parseFloat(copy.totalAfterFees)||((copy.shares||0)*(copy.price||0))+(copy.fees||0);
+    cashTxList.push({
+      type:cashType,
+      date:copy.date,
+      currency:copy.currency||'SGD',
+      amount:parseFloat(amt.toFixed(2)),
+      details:copy.action+' '+copy.shares+' shares of '+(copy.name||copy.ticker)+' @ '+(copy.currency||'')+copy.price,
+      symbol:copy.ticker,
+      stockName:copy.name||copy.ticker,
+      portfolio:copy.exchange||''
+    });
   }
   renderAll();saveToFirebase();showToast('Duplicated');
 }
@@ -1254,6 +1263,36 @@ try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
 initCharts();renderAll();updateDivChart();
 if(firebaseConfig.databaseURL)loadFromFirebase();
+
+// ===================== DIVIDEND SCHEDULER =====================
+function checkUpcomingDividends(){
+  const todayStr=today();
+  dividends.forEach(function(div){
+    if(!div.date||div.date>todayStr)return; // not yet due
+    const cashKey='DIV_'+div.ticker+'_'+div.date+'_'+div.amount.toFixed(4);
+    const alreadyInCash=cashTxList.some(function(ct){return ct._key===cashKey;});
+    if(!alreadyInCash){
+      const h=openH().find(function(x){return x.ticker===div.ticker;});
+      cashTxList.push({
+        _key:cashKey,
+        type:'DIVIDEND',
+        date:div.date,
+        currency:baseCurrency,
+        amount:parseFloat(toBase(div.amount).toFixed(2)),
+        details:'Dividend payout from '+(div.name||div.ticker),
+        symbol:div.ticker,
+        stockName:div.name||div.ticker,
+        portfolio:h?h.exchange:'--'
+      });
+      showToast('Dividend auto-added to cash: '+div.ticker);
+      renderCash();renderMetrics();
+      saveToFirebase();
+    }
+  });
+}
+// Run on load and then every 60 seconds
+checkUpcomingDividends();
+setInterval(checkUpcomingDividends,60000);
 </script>
 </body>
 </html>

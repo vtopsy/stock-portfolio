@@ -1210,15 +1210,38 @@ function exportCashCSV(){
 }
 
 // ===================== FIREBASE =====================
-function saveFirebaseConfig(){firebaseConfig={apiKey:document.getElementById('fbApiKey').value,databaseURL:document.getElementById('fbDbUrl').value};try{localStorage.setItem('piq_fb',JSON.stringify(firebaseConfig));}catch(e){}document.getElementById('fbStatus').textContent=firebaseConfig.databaseURL?'Config saved':'Not connected';}
+function saveFirebaseConfig(){
+  const url=document.getElementById('fbDbUrl').value.trim();
+  const key=document.getElementById('fbApiKey').value.trim();
+  firebaseConfig={apiKey:key,databaseURL:url};
+  try{localStorage.setItem('piq_fb',JSON.stringify(firebaseConfig));}catch(e){}
+  document.getElementById('fbStatus').textContent=url?'Config saved — click Load to fetch data':'Enter Database URL';
+}
+function getFirebaseUrl(path){
+  const base=firebaseConfig.databaseURL.replace(/\/$/,'');
+  return base+'/'+path;
+}
+
 async function saveToFirebase(){
   if(!firebaseConfig.databaseURL)return;
-  try{await fetch(firebaseConfig.databaseURL+'/portfolio.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({transactions:transactions,cashTxList:cashTxList,dividends:dividends,alerts:alerts,watchlist:watchlist})});document.getElementById('syncStatus').textContent='Synced';}catch(e){}
+  try{
+    const res=await fetch(getFirebaseUrl('portfolio.json'),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({transactions:transactions,cashTxList:cashTxList,dividends:dividends,alerts:alerts,watchlist:watchlist})});
+    if(res.ok){document.getElementById('syncStatus').textContent='Synced';}
+    else{console.error('Firebase save error:',res.status,await res.text());}
+  }catch(e){console.error('Firebase save failed:',e);}
 }
+
 async function loadFromFirebase(){
   if(!firebaseConfig.databaseURL){showToast('Set Firebase URL first','#2e1a1a');return;}
   try{
-    const res=await fetch(firebaseConfig.databaseURL+'/portfolio.json');
+    document.getElementById('fbStatus').textContent='Loading...';
+    const res=await fetch(getFirebaseUrl('portfolio.json'));
+    if(!res.ok){
+      const txt=await res.text();
+      document.getElementById('fbStatus').textContent='Error '+res.status+': '+txt.slice(0,80);
+      showToast('Firebase error: '+res.status,'#2e1a1a');
+      return;
+    }
     const data=await res.json();
     if(data){
       if(data.transactions)transactions=data.transactions;
@@ -1226,9 +1249,19 @@ async function loadFromFirebase(){
       if(data.dividends)dividends=data.dividends;
       if(data.alerts)alerts=data.alerts;
       if(data.watchlist)watchlist=data.watchlist;
-      renderAll();updateDivChart();document.getElementById('syncStatus').textContent='Loaded';showToast('Loaded from Firebase');
-    }else showToast('No data in Firebase','#2e1a1a');
-  }catch(e){showToast('Firebase load failed','#2e1a1a');}
+      renderAll();updateDivChart();
+      document.getElementById('syncStatus').textContent='Loaded';
+      document.getElementById('fbStatus').textContent='Loaded successfully';
+      showToast('Loaded from Firebase');
+    }else{
+      document.getElementById('fbStatus').textContent='No data found';
+      showToast('No data in Firebase','#2e1a1a');
+    }
+  }catch(e){
+    document.getElementById('fbStatus').textContent='Failed: '+e.message;
+    showToast('Firebase load failed: '+e.message,'#2e1a1a');
+    console.error('Firebase load error:',e);
+  }
 }
 
 // ===================== EMAIL =====================

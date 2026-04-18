@@ -742,7 +742,12 @@ function renderHoldingsSummaryTable(){
   oh.forEach(function(h){
     const c=h.currency||'USD';
     if(!curMap[c])curMap[c]={mv:0,cost:0,pnl:0,annDiv:0};
-    curMap[c].mv+=h.mv;curMap[c].cost+=h.totalCostUSD;curMap[c].pnl+=h.pnl;curMap[c].annDiv+=h.annDiv;
+    curMap[c].mv+=h.mv;
+    curMap[c].cost+=h.totalCostUSD;
+    curMap[c].pnl+=h.pnl;
+    // Use actual dividends received for this ticker, converted to this currency
+    const divUSD=totalDivReceivedUSD(h.ticker);
+    curMap[c].annDiv+=divUSD;
   });
   const closedPnl={};
   const runSh={},runCost={};

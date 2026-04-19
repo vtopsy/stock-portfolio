@@ -618,7 +618,7 @@ const openH=()=>buildHoldings().filter(h=>h.shares>0.0001).map(calcH);
 const totalMV=()=>openH().reduce((s,h)=>s+h.mv,0);
 const totalCost=()=>openH().reduce((s,h)=>s+h.totalCostUSD,0);
 const totalPnL=()=>totalMV()-totalCost();
-const totalAnnDiv=()=>openH().reduce((s,h)=>s+h.annDiv,0);
+const totalAnnDiv=()=>totalDivReceivedUSD();
 
 function cashBalances(){
   const bal={};
@@ -739,9 +739,8 @@ function renderMetrics(){
     ?'<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3)">Import your CSV or add a transaction to get started.</div>'
     :'<div class="metric m-purple"><div class="metric-label">Portfolio Value</div><div class="metric-value">'+fmt(mv)+'</div><div class="metric-sub">Cost: '+fmt(cost)+'</div></div>'
     +'<div class="metric m-green"><div class="metric-label">Unrealized P&L</div><div class="metric-value '+(pnl>=0?'pos':'neg')+'">'+(pnl>=0?'+':'')+fmt(pnl)+'</div><div class="metric-sub '+(pnl>=0?'pos':'neg')+'">'+(pnl>=0?'+':'')+pct.toFixed(2)+'%</div></div>'
-    +'<div class="metric m-amber"><div class="metric-label">Annual Dividends</div><div class="metric-value">'+fmt(div)+'</div><div class="metric-sub">Yield: '+(mv>0?(div/mv*100).toFixed(2):0)+'%</div></div>'
-    +'<div class="metric m-cyan"><div class="metric-label">Monthly Income</div><div class="metric-value">'+fmt(div/12)+'</div></div>'
-    +'<div class="metric m-teal"><div class="metric-label">Total Cash</div><div class="metric-value">'+fmt(cash)+'</div><div class="metric-sub">'+Object.keys(cashBalances()).length+' currencies</div></div>'
+    +'<div class="metric m-amber"><div class="metric-label">Total Dividends</div><div class="metric-value">'+fmt(div)+'</div><div class="metric-sub">Received to date</div></div>'
+    +'<div class="metric m-cyan"><div class="metric-label">Total Cash</div><div class="metric-value">'+fmt(cash)+'</div><div class="metric-sub">'+Object.keys(cashBalances()).length+' currencies</div></div>'
     +'<div class="metric m-pink"><div class="metric-label">Net Worth</div><div class="metric-value">'+fmt(mv+cash)+'</div><div class="metric-sub">Investments + Cash</div></div>';
 }
 
@@ -755,9 +754,7 @@ function renderHoldingsSummaryTable(){
     curMap[c].mv+=h.mv;
     curMap[c].cost+=h.totalCostUSD;
     curMap[c].pnl+=h.pnl;
-    // Use actual dividends received for this ticker, converted to this currency
-    const divUSD=totalDivReceivedUSD(h.ticker);
-    curMap[c].annDiv+=divUSD;
+    curMap[c].annDiv+=totalDivReceivedUSD(h.ticker);
   });
   const closedPnl={};
   const runSh={},runCost={};
@@ -810,7 +807,7 @@ function renderHoldingsSummaryTable(){
 function renderTopHoldings(){
   const sorted=openH().sort(function(a,b){return b.mv-a.mv;}).slice(0,8);
   document.getElementById('topHoldingsBody').innerHTML=sorted.length
-    ?'<table class="tbl"><thead><tr><th>No.</th><th>Exchange</th><th>Symbol</th><th>Stock Name</th><th class="r">Mkt Value</th><th class="r">P&L</th><th class="r">P&L%</th></tr></thead><tbody>'+sorted.map(function(h,i){return '<tr><td style="color:var(--text3)">'+(i+1)+'</td><td><span class="badge badge-cyan">'+h.exchange+'</span></td><td><b>'+h.ticker+'</b></td><td style="color:var(--text2)">'+h.name+'</td><td class="r">'+fmt(h.mv)+'</td><td class="r '+(h.pnl>=0?'pos':'neg')+'">'+(h.pnl>=0?'+':'')+fmt(h.pnl)+'</td><td class="r"><span class="badge '+(h.pct>=0?'badge-green':'badge-red')+'">'+(h.pct>=0?'+':'')+h.pct.toFixed(1)+'%</span></td></tr>';}).join('')+'</tbody></table>'
+    ?'<table class="tbl"><thead><tr><th>No.</th><th>Exchange</th><th>Symbol</th><th>Stock Name</th><th class="r">Mkt Value</th><th class="r">P&L</th><th class="r">P&L%</th></tr></thead><tbody>'+sorted.map(function(h,i){return '<tr><td style="color:var(--text3)">'+(i+1)+'</td><td><span class="badge badge-cyan">'+h.exchange+'</span></td><td><b>'+h.ticker+'</b></td><td style="color:var(--text2)">'+h.name+'</td><td class="r">'+fmt(h.mv)+'</td><td class="r '+(h.pnl>=0?'pos':'neg')+'">'+(h.pnl>=0?'+':'')+fmt(h.pnl)+'</td><td class="r"><span class="badge '+(h.pnl>=0?'badge-green':'badge-red')+'">'+(h.pnl>=0?'+':'')+h.pct.toFixed(1)+'%</span></td></tr>';}).join('')+'</tbody></table>'
     :'<div style="text-align:center;padding:24px;color:var(--text3)">No holdings yet.</div>';
 }
 
@@ -832,16 +829,40 @@ function renderHoldings(){
   rows.forEach(function(h){const c=h.currency||'SGD';if(!byCur[c])byCur[c]={n:0,mv:0};byCur[c].n++;byCur[c].mv+=h.mv;});
   document.getElementById('holdingSummaryRow').innerHTML='<span>Beta = <b>0.0</b></span><span style="color:var(--border)">|</span><span>VaR = <b>'+(mv>0?(mv*0.024/mv*100).toFixed(2):0)+'%</b></span><span style="color:var(--border)">|</span><span>Expected Shortfall = <b>'+(mv>0?(mv*0.035/mv*100).toFixed(2):0)+'%</b></span>'+Object.entries(byCur).map(function(e){return '<span style="margin-left:8px;background:var(--bg3);border-radius:3px;padding:2px 8px;font-size:12px"><b>'+e[0]+'</b> '+e[1].n+' stocks &middot; '+fmt(e[1].mv)+'</span>';}).join('');
   if(!rows.length){document.getElementById('holdingsContent').innerHTML='<div style="text-align:center;padding:30px;color:var(--text3)">'+(holdingView==='open'?'No open positions.':'No closed positions.')+'</div>';return;}
-  document.getElementById('holdingsContent').innerHTML='<div class="tbl-wrap"><table class="tbl"><thead><tr><th>No.</th><th>Symbol</th><th>Stock Name</th><th>Port%</th><th class="r">Shares</th><th class="r">APrice</th><th class="r">CostY%</th><th class="r">CurrY%</th><th class="r">Close</th><th>Cur</th><th class="r">Cost</th><th class="r">P&L%</th><th class="r">Div%</th><th class="r">P&L+Div</th></tr></thead><tbody>'+rows.map(function(h,i){
-    const portPct=mv>0?(h.mv/mv*100).toFixed(2):'0.00';
-    const divPct=(h.divYield||0).toFixed(2);
-    const costY=h.totalCostUSD>0?(h.annDiv/h.totalCostUSD*100).toFixed(2):'0.00';
-    const currY=h.mv>0?(h.annDiv/h.mv*100).toFixed(2):'0.00';
-    const plDiv=h.pnl+h.annDiv;
-    const plDivPct = h.cost > 0 ? (h.totalDiv / h.cost) * 100 : 0;
-    const plDivPctColor=h.pct>=0?'var(--green)':'var(--red)';
-    const plDivColor=plDiv>=0?'var(--green)':'var(--red)';
-    return '<tr><td style="color:var(--text3)">'+(i+1)+'</td><td><b>'+h.ticker+'</b></td><td style="color:var(--text2)">'+h.name+'</td><td>'+portPct+'%</td><td class="r">'+h.shares.toLocaleString(undefined,{maximumFractionDigits:4})+'</td><td class="r">'+h.currency+' '+((h.avg||0)*(FX[h.currency]||1)).toFixed(4)+'</td><td class="r">'+costY+'%</td><td class="r">'+currY+'%</td><td class="r">'+((h.price||0)*(FX[h.currency]||1)).toFixed(3)+'</td><td>'+h.currency+'</td><td class="r">'+fmt(h.totalCostUSD)+'</td><td class="r"><span class="badge '+(h.pct>=0?'badge-green':'badge-red')+'">'+(h.pct>=0?'+':'')+h.pct.toFixed(2)+'%</span></td><td class="r">'+divPct+'%</td><td class="r" style="color:'+plDivColor+';font-weight:600">'+(plDiv>=0?'+':'')+baseCurrency+' '+Math.abs(plDiv).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td><td class="r" style="color:'+plDivPctColor+';font-weight:600">'+(plDivPct>=0?'+':'')+plDivPct.toFixed(2)+'%</td></tr>';
+  document.getElementById('holdingsContent').innerHTML='<div class="tbl-wrap"><table class="tbl"><thead><tr><th>No.</th><th>Symbol</th><th>Stock Name</th><th>Port%</th><th class="r">Shares</th><th class="r">APrice</th><th class="r">CostY%</th><th class="r">CurrY%</th><th class="r">Close</th><th>Cur</th><th class="r">Cost</th><th class="r">P&amp;L%</th><th class="r">Div</th><th class="r">P&amp;L+Div</th><th class="r">P&amp;L+Div%</th></tr></thead><tbody>'+rows.map(function(h,i){
+    var portPct=mv>0?(h.mv/mv*100).toFixed(2):'0.00';
+    var totalDivUSD=totalDivReceivedUSD(h.ticker);
+    var totalDivBase=toBase(totalDivUSD);
+    var costBase=toBase(h.totalCostUSD);
+    var mvBase=toBase(h.mv);
+    var pnlBase=toBase(h.pnl);
+    var costY=costBase>0?(totalDivBase/costBase*100).toFixed(2):'0.00';
+    var currY=mvBase>0?(totalDivBase/mvBase*100).toFixed(2):'0.00';
+    var plDiv=pnlBase+totalDivBase;
+    var plDivPct=costBase>0?(plDiv/costBase*100):0;
+    var plDivColor=plDiv>=0?'var(--green)':'var(--red)';
+    var plDivPctColor=plDivPct>=0?'var(--green)':'var(--red)';
+    var divDisplay=totalDivBase>0?('<span class="pos">'+baseCurrency+' '+totalDivBase.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</span>'):'--';
+    var plDivStr=(plDiv>=0?'+':'')+baseCurrency+' '+Math.abs(plDiv).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    var plDivPctStr=(plDivPct>=0?'+':'')+plDivPct.toFixed(2)+'%';
+    var pnlBadge='<span class="badge '+(h.pct>=0?'badge-green':'badge-red')+'">'+(h.pct>=0?'+':'')+h.pct.toFixed(2)+'%</span>';
+    return '<tr>'
+      +'<td style="color:var(--text3)">'+(i+1)+'</td>'
+      +'<td><b>'+h.ticker+'</b></td>'
+      +'<td style="color:var(--text2)">'+h.name+'</td>'
+      +'<td>'+portPct+'%</td>'
+      +'<td class="r">'+h.shares.toLocaleString(undefined,{maximumFractionDigits:4})+'</td>'
+      +'<td class="r">'+h.currency+' '+((h.avg||0)*(FX[h.currency]||1)).toFixed(4)+'</td>'
+      +'<td class="r">'+costY+'%</td>'
+      +'<td class="r">'+currY+'%</td>'
+      +'<td class="r">'+((h.price||0)*(FX[h.currency]||1)).toFixed(3)+'</td>'
+      +'<td>'+h.currency+'</td>'
+      +'<td class="r">'+fmt(h.totalCostUSD)+'</td>'
+      +'<td class="r">'+pnlBadge+'</td>'
+      +'<td class="r">'+divDisplay+'</td>'
+      +'<td class="r" style="color:'+plDivColor+';font-weight:600">'+plDivStr+'</td>'
+      +'<td class="r" style="color:'+plDivPctColor+';font-weight:600">'+plDivPctStr+'</td>'
+      +'</tr>';
   }).join('')+'</tbody></table></div>';
 }
 
@@ -926,7 +947,7 @@ function renderDivHistory(){
 function renderDripSim(){
   const on=document.getElementById('dripToggle').checked;
   document.getElementById('dripSimBox').style.display=on?'block':'none';
-  if(on){const div=totalAnnDiv(),sh=openH().reduce(function(s,h){return s+h.shares;},0),ap=sh>0?totalMV()/sh:0;document.getElementById('dripShares').textContent=(div/ap).toFixed(2);document.getElementById('dripExtra').textContent=fmt((div/ap)*ap*0.025);}
+  if(on){const div=totalAnnDiv(),sh=openH().reduce(function(s,h){return s+h.shares;},0),ap=sh>0?totalMV()/sh:0;document.getElementById('dripShares').textContent=(div/(ap||1)).toFixed(2);document.getElementById('dripExtra').textContent=fmt((div/(ap||1))*ap*0.025);}
 }
 
 function renderCalendar(){
@@ -962,7 +983,7 @@ function renderGeoList(){
 
 function renderXirr(){
   const mv=totalMV(),cost=totalCost(),pnl=totalPnL(),ret=cost>0?(pnl/cost*100).toFixed(1):'0.0';
-  document.getElementById('xirrBox').innerHTML=[['Total Return',(pnl>=0?'+':'')+ret+'%','Since inception'],['XIRR (est.)',cost>0?'+'+(pnl/cost*100*0.7).toFixed(1)+'%':'--','Annualized'],['Div CAGR',dividends.length>0?'+8.3%':'--','Compound growth'],['vs S&P 500',pnl>=0?'+3.6%':'-1.2%','YTD']].map(function(x){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)"><div><div>'+x[0]+'</div><div style="font-size:12px;color:var(--text3)">'+x[2]+'</div></div><div style="font-weight:600;color:'+(x[1].charAt(0)==='+' ?'var(--green)':x[1].charAt(0)==='-'?'var(--red)':'var(--text)')+'">'+x[1]+'</div></div>';}).join('');
+  document.getElementById('xirrBox').innerHTML=[['Total Return',(pnl>=0?'+':'')+ret+'%','Since inception'],['XIRR (est.)',cost>0?'+'+(pnl/cost*100*0.7).toFixed(1)+'%':'--','Annualized'],['Div received',dividends.length>0?fmt(totalDivReceivedUSD()):'--','Total dividends'],['vs S&P 500',pnl>=0?'+3.6%':'-1.2%','YTD']].map(function(x){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)"><div><div>'+x[0]+'</div><div style="font-size:12px;color:var(--text3)">'+x[2]+'</div></div><div style="font-weight:600;color:'+(x[1].charAt(0)==='+' ?'var(--green)':x[1].charAt(0)==='-'?'var(--red)':'var(--text)')+'">'+x[1]+'</div></div>';}).join('');
 }
 
 function renderWatchlist(){
@@ -1044,24 +1065,27 @@ function saveEditTx(){
   transactions[idx]=Object.assign({},transactions[idx],{action:curEditAction,ticker:document.getElementById('eTicker').value.toUpperCase().trim(),name:document.getElementById('eName').value,date:document.getElementById('eDate').value,exchange:document.getElementById('eExchange').value,shares:shares,price:price,fees:fees,currency:document.getElementById('eCurrency').value,notes:document.getElementById('eNotes').value,totalAfterFees:parseFloat(document.getElementById('eTotal').value)||shares*price+fees});
   closeModal('editTxModal');renderAll();saveToFirebase();showToast('Transaction updated');
 }
-function delTx(idx){if(!confirm('Delete this transaction?'))return;transactions.splice(idx,1);renderAll();saveToFirebase();showToast('Deleted');}
+function delTx(idx){
+  if(!confirm('Delete this transaction?'))return;
+  const tx=transactions[idx];
+  if(tx&&(tx.action==='Buy'||tx.action==='Sell')){
+    const cashType=tx.action==='Sell'?'SELL':'BUY';
+    const amt=parseFloat(tx.totalAfterFees)||((tx.shares||0)*(tx.price||0))+(tx.fees||0);
+    const matchIdx=cashTxList.findIndex(function(ct){
+      return (ct.type||'').toUpperCase()===cashType&&ct.date===tx.date&&ct.symbol===tx.ticker&&Math.abs((parseFloat(ct.amount)||0)-amt)<0.02;
+    });
+    if(matchIdx>-1)cashTxList.splice(matchIdx,1);
+  }
+  transactions.splice(idx,1);renderAll();saveToFirebase();showToast('Deleted');
+}
 function dupTx(idx){
   const src=transactions[idx];
-  const copy=Object.assign({},src,{date:today()});
+  const copy=Object.assign({},src);
   transactions.push(copy);
   if(copy.action==='Buy'||copy.action==='Sell'){
     const cashType=copy.action==='Sell'?'SELL':'BUY';
     const amt=parseFloat(copy.totalAfterFees)||((copy.shares||0)*(copy.price||0))+(copy.fees||0);
-    cashTxList.push({
-      type:cashType,
-      date:copy.date,
-      currency:copy.currency||'SGD',
-      amount:parseFloat(amt.toFixed(2)),
-      details:copy.action+' '+copy.shares+' shares of '+(copy.name||copy.ticker)+' @ '+(copy.currency||'')+copy.price,
-      symbol:copy.ticker,
-      stockName:copy.name||copy.ticker,
-      portfolio:copy.exchange||''
-    });
+    cashTxList.push({type:cashType,date:copy.date,currency:copy.currency||'SGD',amount:parseFloat(amt.toFixed(2)),details:copy.action+' '+copy.shares+' shares of '+(copy.name||copy.ticker)+' @ '+(copy.currency||'')+copy.price,symbol:copy.ticker,stockName:copy.name||copy.ticker,portfolio:copy.exchange||''});
   }
   renderAll();saveToFirebase();showToast('Duplicated');
 }
@@ -1076,18 +1100,13 @@ function addCashTx(){
   const symbol=curCashAction==='DIVIDEND'?(document.getElementById('ctSymbol').value||''):'';
   const stockName=curCashAction==='DIVIDEND'?(document.getElementById('ctStockName').value||''):'';
   const details=curCashAction==='DIVIDEND'&&symbol?'Dividend payout from '+(stockName||symbol):notes;
-
   if(curCashAction==='DIVIDEND'&&symbol&&amount>0){
     const amtUSD=toUSD(amount,currency);
     const divKey='DIV_'+symbol+'_'+date+'_'+amtUSD.toFixed(4);
-    // Check duplicate in dividends list
-    const divExists=dividends.some(function(d){return d._key===divKey;});
-    if(!divExists){
+    if(!dividends.some(function(d){return d._key===divKey;})){
       dividends.push({_key:divKey,ticker:symbol,name:stockName||symbol,amount:amtUSD,date:date,type:'Dividend'});
     }
-    // Check duplicate in cashTxList by same key
-    const cashExists=cashTxList.some(function(ct){return ct._key===divKey;});
-    if(!cashExists){
+    if(!cashTxList.some(function(ct){return ct._key===divKey;})){
       cashTxList.push({_key:divKey,type:'DIVIDEND',date:date,currency:currency,amount:amount,details:details,symbol:symbol,stockName:stockName,portfolio:portfolio,notes:notes});
     } else {
       showToast('Duplicate dividend entry skipped','#2e1a1a');
@@ -1230,16 +1249,14 @@ function getFirebaseUrl(path){
   const base=firebaseConfig.databaseURL.replace(/\/$/,'');
   return base+'/'+path;
 }
-
 async function saveToFirebase(){
   if(!firebaseConfig.databaseURL)return;
   try{
     const res=await fetch(getFirebaseUrl('portfolio.json'),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({transactions:transactions,cashTxList:cashTxList,dividends:dividends,alerts:alerts,watchlist:watchlist})});
     if(res.ok){document.getElementById('syncStatus').textContent='Synced';}
-    else{console.error('Firebase save error:',res.status,await res.text());}
+    else{console.error('Firebase save error:',res.status);}
   }catch(e){console.error('Firebase save failed:',e);}
 }
-
 async function loadFromFirebase(){
   if(!firebaseConfig.databaseURL){showToast('Set Firebase URL first','#2e1a1a');return;}
   try{
@@ -1248,8 +1265,7 @@ async function loadFromFirebase(){
     if(!res.ok){
       const txt=await res.text();
       document.getElementById('fbStatus').textContent='Error '+res.status+': '+txt.slice(0,80);
-      showToast('Firebase error: '+res.status,'#2e1a1a');
-      return;
+      showToast('Firebase error: '+res.status,'#2e1a1a');return;
     }
     const data=await res.json();
     if(data){
@@ -1269,7 +1285,6 @@ async function loadFromFirebase(){
   }catch(e){
     document.getElementById('fbStatus').textContent='Failed: '+e.message;
     showToast('Firebase load failed: '+e.message,'#2e1a1a');
-    console.error('Firebase load error:',e);
   }
 }
 
@@ -1315,29 +1330,17 @@ if(firebaseConfig.databaseURL)loadFromFirebase();
 function checkUpcomingDividends(){
   const todayStr=today();
   dividends.forEach(function(div){
-    if(!div.date||div.date>todayStr)return; // not yet due
+    if(!div.date||div.date>todayStr)return;
     const cashKey='DIV_'+div.ticker+'_'+div.date+'_'+div.amount.toFixed(4);
     const alreadyInCash=cashTxList.some(function(ct){return ct._key===cashKey;});
     if(!alreadyInCash){
       const h=openH().find(function(x){return x.ticker===div.ticker;});
-      cashTxList.push({
-        _key:cashKey,
-        type:'DIVIDEND',
-        date:div.date,
-        currency:baseCurrency,
-        amount:parseFloat(toBase(div.amount).toFixed(2)),
-        details:'Dividend payout from '+(div.name||div.ticker),
-        symbol:div.ticker,
-        stockName:div.name||div.ticker,
-        portfolio:h?h.exchange:'--'
-      });
+      cashTxList.push({_key:cashKey,type:'DIVIDEND',date:div.date,currency:baseCurrency,amount:parseFloat(toBase(div.amount).toFixed(2)),details:'Dividend payout from '+(div.name||div.ticker),symbol:div.ticker,stockName:div.name||div.ticker,portfolio:h?h.exchange:'--'});
       showToast('Dividend auto-added to cash: '+div.ticker);
-      renderCash();renderMetrics();
-      saveToFirebase();
+      renderCash();renderMetrics();saveToFirebase();
     }
   });
 }
-// Run on load and then every 60 seconds
 checkUpcomingDividends();
 setInterval(checkUpcomingDividends,60000);
 </script>

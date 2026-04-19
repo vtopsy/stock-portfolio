@@ -838,7 +838,7 @@ function renderHoldings(){
     const costY=h.totalCostUSD>0?(h.annDiv/h.totalCostUSD*100).toFixed(2):'0.00';
     const currY=h.mv>0?(h.annDiv/h.mv*100).toFixed(2):'0.00';
     const plDiv=h.pnl+h.annDiv;
-    const plPctColor=h.pct>=0?'var(--green)':'var(--red)';
+    const plDivPctColor=h.pct>=0?'var(--green)':'var(--red)';
     const plDivColor=plDiv>=0?'var(--green)':'var(--red)';
     return '<tr><td style="color:var(--text3)">'+(i+1)+'</td><td><b>'+h.ticker+'</b></td><td style="color:var(--text2)">'+h.name+'</td><td>'+portPct+'%</td><td class="r">'+h.shares.toLocaleString(undefined,{maximumFractionDigits:4})+'</td><td class="r">'+h.currency+' '+((h.avg||0)*(FX[h.currency]||1)).toFixed(4)+'</td><td class="r">'+costY+'%</td><td class="r">'+currY+'%</td><td class="r">'+((h.price||0)*(FX[h.currency]||1)).toFixed(3)+'</td><td>'+h.currency+'</td><td class="r">'+fmt(h.totalCostUSD)+'</td><td class="r"><span class="badge '+(h.pct>=0?'badge-green':'badge-red')+'">'+(h.pct>=0?'+':'')+h.pct.toFixed(2)+'%</span></td><td class="r">'+divPct+'%</td><td class="r" style="color:'+plDivColor+';font-weight:600">'+(plDiv>=0?'+':'')+baseCurrency+' '+Math.abs(plDiv).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td><td class="r" style="color:'+plDivPctColor+';font-weight:600">'+(plDivPct>=0?'+':'')+plDivPct.toFixed(2)+'%</td></tr>';
   }).join('')+'</tbody></table></div>';

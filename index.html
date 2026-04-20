@@ -1187,7 +1187,38 @@ function buildTicker(rawSymbol, exchange){
   return sym;
 }
 
-function importCSV(event){
+// ===================== YAHOO FINANCE NAME LOOKUP =====================
+var nameCache={};
+async function fetchStockName(ticker){
+  if(nameCache[ticker])return nameCache[ticker];
+  try{
+    var url='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(ticker)+'?interval=1d&range=1d';
+    var proxy='https://corsproxy.io/?'+encodeURIComponent(url);
+    var res=await fetch(proxy);
+    if(res.ok){
+      var data=await res.json();
+      var meta=data&&data.chart&&data.chart.result&&data.chart.result[0]&&data.chart.result[0].meta;
+      var name=(meta&&(meta.longName||meta.shortName))||'';
+      if(name){nameCache[ticker]=name;return name;}
+    }
+  }catch(e){}
+  return '';
+}
+
+async function enrichTransactionNames(){
+  var tickers=[...new Set(transactions.map(function(t){return t.ticker;}).filter(Boolean))];
+  for(var i=0;i<tickers.length;i++){
+    var ticker=tickers[i];
+    var name=await fetchStockName(ticker);
+    if(name){
+      nameCache[ticker]=name;
+      transactions.forEach(function(t){if(t.ticker===ticker)t.name=name;});
+    }
+    await new Promise(function(r){setTimeout(r,150);});
+  }
+  renderTransactions();
+  renderHoldings();
+}
   const file=event.target.files[0];if(!file)return;
   Papa.parse(file,{header:false,dynamicTyping:false,skipEmptyLines:true,complete:function(results){
     var rows=results.data;
@@ -1267,29 +1298,67 @@ function importCSV(event){
   },error:function(e){showToast('Parse error: '+e.message,'#2e1a1a');}});
 }
 
+function buildTickerFromPrefixed(prefixedSymbol){
+  if(!prefixedSymbol)return '';
+  var s=String(prefixedSymbol).trim();
+  // Format: EXCHANGE:SYMBOL e.g. SGX:D05, HKEX:300, USX:AAPL
+  var parts=s.split(':');
+  var exchange=parts.length>1?parts[0].toUpperCase():'';
+  var raw=parts.length>1?parts[1]:parts[0];
+  return buildTicker(raw,exchange||'USX');
+}
+
 function importCashCSV(event){
   const file=event.target.files[0];if(!file)return;
   Papa.parse(file,{header:false,dynamicTyping:false,skipEmptyLines:true,complete:function(results){
     var rows=results.data;
-    if(rows.length&&rows[0][0].toLowerCase()==='type')rows=rows.slice(1);
+    // Skip header row
+    if(rows.length&&isNaN(parseFloat(rows[0][3]))&&rows[0][0].toLowerCase()==='type')rows=rows.slice(1);
+    // Clear all existing cash transactions first
+    cashTxList=[];
     var added=0;
     rows.forEach(function(r){
-      const type=String(r[0]||'').trim().toUpperCase();
-      const date=String(r[1]||'').trim(),currency=String(r[2]||'SGD').trim();
-      const amount=parseFloat(r[3])||0,details=String(r[4]||'').trim();
-      const symbol=String(r[5]||'').trim(),stockName=String(r[6]||'').trim(),portfolio=String(r[7]||'').trim();
+      var type=String(r[0]||'').trim().toUpperCase();
+      var date=String(r[1]||'').trim();
+      var currency=String(r[2]||'SGD').trim();
+      var amount=parseFloat(r[3])||0;
+      var details=String(r[4]||'').trim();
+      var prefixedSymbol=String(r[5]||'').trim();
+      var stockName=String(r[6]||'').trim();
+      var portfolio=String(r[7]||'').trim();
       if(!type||!date)return;
-      cashTxList.push({type:type,date:date,currency:currency,amount:amount,details:details,symbol:symbol,stockName:stockName,portfolio:portfolio});
-      if(type==='DIVIDEND'&&symbol&&amount>0){
-        const amtUSD=toUSD(amount,currency);
-        const key='DIV_'+symbol+'_'+date+'_'+amtUSD.toFixed(4);
+      // Build Yahoo-compatible ticker from prefixed symbol (e.g. SGX:D05 -> D05.SI)
+      var ticker=buildTickerFromPrefixed(prefixedSymbol);
+      // Use name from nameCache (populated during tx import) if available, else use CSV value
+      var resolvedName=nameCache[ticker]||stockName||'';
+      // If we have the raw ticker in transactions, try to match name there too
+      if(!resolvedName&&ticker){
+        var matchedTx=transactions.find(function(t){return t.ticker===ticker;});
+        if(matchedTx)resolvedName=matchedTx.name||'';
+      }
+      cashTxList.push({
+        type:type,
+        date:date,
+        currency:currency,
+        amount:amount,
+        details:details,
+        symbol:ticker||prefixedSymbol,
+        stockName:resolvedName||stockName,
+        portfolio:portfolio
+      });
+      // Auto-add DIVIDEND entries to dividends list
+      if(type==='DIVIDEND'&&ticker&&amount>0){
+        var amtUSD=toUSD(amount,currency);
+        var key='DIV_'+ticker+'_'+date+'_'+amtUSD.toFixed(4);
         if(!dividends.some(function(d){return d._key===key;})){
-          dividends.push({_key:key,ticker:symbol,name:stockName||symbol,amount:amtUSD,date:date,type:'Dividend'});
+          dividends.push({_key:key,ticker:ticker,name:resolvedName||stockName||ticker,amount:amtUSD,date:date,type:'Dividend'});
         }
       }
       added++;
     });
-    renderAll();updateDivChart();saveToFirebase();showToast('Imported '+added+' cash transactions');event.target.value='';
+    renderAll();updateDivChart();saveToFirebase();
+    showToast('Imported '+added+' cash transactions (existing data cleared)');
+    event.target.value='';
   },error:function(e){showToast('Parse error: '+e.message,'#2e1a1a');}});
 }
 

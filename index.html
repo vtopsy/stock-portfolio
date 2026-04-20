@@ -1172,22 +1172,95 @@ async function refreshPrices(){
 }
 
 // ===================== CSV =====================
+function buildTicker(rawSymbol, exchange){
+  var sym=String(rawSymbol||'').trim().toUpperCase();
+  var ex=String(exchange||'').trim().toUpperCase();
+  if(ex==='SGX') return sym+'.SI';
+  if(ex==='LSE') return sym+'.L';
+  if(ex==='HKEX'){
+    // Pad to 4 digits
+    var padded=sym.replace(/[^0-9A-Z]/g,'');
+    if(/^\d+$/.test(padded)) padded=padded.padStart(4,'0');
+    return padded+'.HK';
+  }
+  // USX, NYSE, NASDAQ — no suffix
+  return sym;
+}
+
 function importCSV(event){
   const file=event.target.files[0];if(!file)return;
   Papa.parse(file,{header:false,dynamicTyping:false,skipEmptyLines:true,complete:function(results){
     var rows=results.data;
+    // Skip header row if first cell is not a number
     if(rows.length&&isNaN(parseFloat(rows[0][0])))rows=rows.slice(1);
     var added=0;
     rows.forEach(function(r){
-      const action=parseInt(r[0]),exchange=String(r[1]||'').trim(),symbol=String(r[2]||'').trim().toUpperCase();
-      const units=parseFloat(r[3])||0,price=parseFloat(r[4])||0,date=String(r[5]||'').trim();
-      const currency=String(r[6]||'USD').trim(),totalAfter=parseFloat(r[8])||(units*price);
-      const label=String(r[9]||'').trim(),notes=String(r[10]||'').trim();
-      if(!symbol)return;
-      const fees=Math.max(0,totalAfter-(units*price));
-      const txAction=action===1?'Buy':action===-1?'Sell':'Fee';
-      transactions.push({action:txAction,exchange:exchange,ticker:symbol,name:label||symbol,shares:units,price:price,fees:fees,currency:currency,date:date,notes:notes,totalAfterFees:totalAfter});
-      cashTxList.push({type:txAction==='Sell'?'SELL':'BUY',date:date,currency:currency,amount:Math.abs(totalAfter),details:txAction+' '+units+' shares of '+(label||symbol)+' @ '+currency+price,symbol:symbol,stockName:label||symbol,portfolio:exchange});
+      var actionCode=parseInt(r[0]);
+      var exchange=String(r[1]||'').trim().toUpperCase();
+      var rawSymbol=String(r[2]||'').trim();
+      var units=parseFloat(r[3])||0;
+      var price=parseFloat(r[4])||0;
+      var date=String(r[5]||'').trim();
+      var currency=String(r[6]||'USD').trim();
+      var totalBefore=parseFloat(r[7])||0;
+      var totalAfter=parseFloat(r[8])||0;
+      var label=String(r[9]||'').trim();
+      var notes=String(r[10]||'').trim();
+
+      if(!rawSymbol)return;
+
+      // Build Yahoo Finance compatible ticker
+      var ticker=buildTicker(rawSymbol,exchange);
+
+      // Action mapping
+      var txAction=actionCode===1?'Buy':actionCode===-1?'Sell':'Fee';
+
+      // Fees = abs(totalAfter - totalBefore)
+      // For standalone fee rows (actionCode===0), use full totalAfter as fee
+      var fees=actionCode===0
+        ? Math.abs(totalAfter)
+        : Math.abs(Math.abs(totalAfter)-Math.abs(totalBefore));
+
+      // LSE price unit correction:
+      // Yahoo Finance quotes LSE in pence (GBX), CSV price is in pounds (GBP)
+      // Multiply price by 100 so it matches Yahoo's pence-based quotes
+      var displayPrice=price;
+      var displayCurrency=currency;
+      if(exchange==='LSE'){
+        displayPrice=price*100;
+        displayCurrency='GBX';
+      }
+
+      var txObj={
+        action:txAction,
+        exchange:exchange,
+        ticker:ticker,
+        name:label||rawSymbol.toUpperCase(),
+        shares:units,
+        price:displayPrice,
+        fees:fees,
+        currency:displayCurrency,
+        date:date,
+        notes:notes,
+        totalAfterFees:Math.abs(totalAfter),
+        rawSymbol:rawSymbol.toUpperCase()
+      };
+
+      transactions.push(txObj);
+
+      // Only add to cash for Buy/Sell (not Fee rows)
+      if(txAction==='Buy'||txAction==='Sell'){
+        cashTxList.push({
+          type:txAction==='Sell'?'SELL':'BUY',
+          date:date,
+          currency:currency,  // use original currency for cash (GBP not GBX)
+          amount:Math.abs(totalAfter),
+          details:txAction+' '+units+' shares of '+(label||rawSymbol.toUpperCase())+' @ '+currency+price,
+          symbol:ticker,
+          stockName:label||rawSymbol.toUpperCase(),
+          portfolio:exchange
+        });
+      }
       added++;
     });
     renderAll();saveToFirebase();showToast('Imported '+added+' transactions');event.target.value='';

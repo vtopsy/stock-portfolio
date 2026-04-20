@@ -1218,8 +1218,8 @@ async function enrichTransactionNames(){
   }
   renderTransactions();
   renderHoldings();
-}
-  const file=event.target.files[0];if(!file)return;
+//}
+//  const file=event.target.files[0];if(!file)return;
   Papa.parse(file,{header:false,dynamicTyping:false,skipEmptyLines:true,complete:function(results){
     var rows=results.data;
     // Skip header row if first cell is not a number
@@ -1306,6 +1306,29 @@ function buildTickerFromPrefixed(prefixedSymbol){
   var exchange=parts.length>1?parts[0].toUpperCase():'';
   var raw=parts.length>1?parts[1]:parts[0];
   return buildTicker(raw,exchange||'USX');
+}
+
+// ===================== CSV =====================
+function importCSV(event){
+  const file=event.target.files[0];if(!file)return;
+  Papa.parse(file,{header:false,dynamicTyping:false,skipEmptyLines:true,complete:function(results){
+    var rows=results.data;
+    if(rows.length&&isNaN(parseFloat(rows[0][0])))rows=rows.slice(1);
+    var added=0;
+    rows.forEach(function(r){
+      const action=parseInt(r[0]),exchange=String(r[1]||'').trim(),symbol=String(r[2]||'').trim().toUpperCase();
+      const units=parseFloat(r[3])||0,price=parseFloat(r[4])||0,date=String(r[5]||'').trim();
+      const currency=String(r[6]||'USD').trim(),totalAfter=parseFloat(r[8])||(units*price);
+      const label=String(r[9]||'').trim(),notes=String(r[10]||'').trim();
+      if(!symbol)return;
+      const fees=Math.max(0,totalAfter-(units*price));
+      const txAction=action===1?'Buy':action===-1?'Sell':'Fee';
+      transactions.push({action:txAction,exchange:exchange,ticker:symbol,name:label||symbol,shares:units,price:price,fees:fees,currency:currency,date:date,notes:notes,totalAfterFees:totalAfter});
+      cashTxList.push({type:txAction==='Sell'?'SELL':'BUY',date:date,currency:currency,amount:Math.abs(totalAfter),details:txAction+' '+units+' shares of '+(label||symbol)+' @ '+currency+price,symbol:symbol,stockName:label||symbol,portfolio:exchange});
+      added++;
+    });
+    renderAll();saveToFirebase();showToast('Imported '+added+' transactions');event.target.value='';
+  },error:function(e){showToast('Parse error: '+e.message,'#2e1a1a');}});
 }
 
 function importCashCSV(event){

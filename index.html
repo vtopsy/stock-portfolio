@@ -1159,8 +1159,10 @@ async function refreshPrices(){
           // --- convert GBX ---
           let price = meta.regularMarketPrice;
           // Check if Yahoo Finance reports the price in GBX (Pence)
+          let calcCurrency = h.currency; // Default to your holding's currency
           if (meta.currency === 'GBX') {
             price = price / 100;
+            calcCurrency = 'GBP'; // Force the converter to use Pound exchange rates
           }
           //const price=meta.regularMarketPrice,prev=meta.previousClose||price;
           const prev = meta.previousClose || price;

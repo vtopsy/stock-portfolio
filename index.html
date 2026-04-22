@@ -1176,7 +1176,7 @@ async function refreshPrices(){
           if(w){w.price=price;w.chg=+(price-prev).toFixed(2);w.pct=prev>0?+((price-prev)/prev*100).toFixed(2):0;}
         }
       }
-    }catch(e){}
+    }catch(e){console.error("Error fetching " + ticker, e);}
     await new Promise(function(r){setTimeout(r,1000);});
   }
   document.getElementById('syncStatus').textContent=n?'Live ('+n+')':'Local';

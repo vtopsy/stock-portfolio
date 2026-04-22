@@ -1161,10 +1161,10 @@ async function refreshPrices(){
           let prev = meta.previousClose || price;
           // 1. Logic for GBX to GBP conversion
           let calcCurrency = h.currency; // Default to your holding's currency
-          if (meta.currency === 'GBX') {
+          if (meta.currency === 'GBX' || meta.currency === 'GBp' || (h && h.exchange === 'LSE')) {
             price = price / 100;
             prev = prev / 100;
-            calcCurrency = 'GBP'; // Force the converter to use Pound exchange rates
+            calcCurrency = 'GBP';
           }
           //const price=meta.regularMarketPrice,prev=meta.previousClose||price;
           //const prev = meta.previousClose || price;

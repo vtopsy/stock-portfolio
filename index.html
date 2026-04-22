@@ -1156,7 +1156,14 @@ async function refreshPrices(){
         const data=await res.json();
         const meta=data&&data.chart&&data.chart.result&&data.chart.result[0]&&data.chart.result[0].meta;
         if(meta&&meta.regularMarketPrice>0){
-          const price=meta.regularMarketPrice,prev=meta.previousClose||price;
+          // --- convert GBX ---
+          let price = meta.regularMarketPrice;
+          // Check if Yahoo Finance reports the price in GBX (Pence)
+          if (meta.currency === 'GBX') {
+            price = price / 100;
+          }
+          //const price=meta.regularMarketPrice,prev=meta.previousClose||price;
+          const prev = meta.previousClose || price;
           const h=buildHoldings().find(function(x){return x.ticker===ticker;});
           if(h){livePrices[ticker]=toUSD(price,h.currency);n++;}
           const w=watchlist.find(function(x){return x.ticker===ticker;});

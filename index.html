@@ -829,21 +829,31 @@ function renderHoldings(){
   rows.forEach(function(h){const c=h.currency||'SGD';if(!byCur[c])byCur[c]={n:0,mv:0};byCur[c].n++;byCur[c].mv+=h.mv;});
   document.getElementById('holdingSummaryRow').innerHTML='<span>Beta = <b>0.0</b></span><span style="color:var(--border)">|</span><span>VaR = <b>'+(mv>0?(mv*0.024/mv*100).toFixed(2):0)+'%</b></span><span style="color:var(--border)">|</span><span>Expected Shortfall = <b>'+(mv>0?(mv*0.035/mv*100).toFixed(2):0)+'%</b></span>'+Object.entries(byCur).map(function(e){return '<span style="margin-left:8px;background:var(--bg3);border-radius:3px;padding:2px 8px;font-size:12px"><b>'+e[0]+'</b> '+e[1].n+' stocks &middot; '+fmt(e[1].mv)+'</span>';}).join('');
   if(!rows.length){document.getElementById('holdingsContent').innerHTML='<div style="text-align:center;padding:30px;color:var(--text3)">'+(holdingView==='open'?'No open positions.':'No closed positions.')+'</div>';return;}
-  document.getElementById('holdingsContent').innerHTML='<div class="tbl-wrap"><table class="tbl"><thead><tr><th>No.</th><th>Symbol</th><th>Stock Name</th><th>Port%</th><th class="r">Shares</th><th class="r">APrice</th><th class="r">CostY%</th><th class="r">CurrY%</th><th class="r">Close</th><th>Cur</th><th class="r">Cost</th><th class="r">P&amp;L%</th><th class="r">Div</th><th class="r">P&amp;L+Div</th><th class="r">P&amp;L+Div%</th></tr></thead><tbody>'+rows.map(function(h,i){
+  document.getElementById('holdingsContent').innerHTML='<div class="tbl-wrap"><table class="tbl"><thead><tr><th>No.</th><th>Symbol</th><th>Stock Name</th><th>Port%</th><th class="r">Shares</th><th class="r">APrice</th><th class="r">CostY%</th><th class="r">CurrY%</th><th class="r">Close</th><th>Cur</th><th class="r">Cost</th><th class="r">Div</th><th class="r">P&amp;L%</th><th class="r">P&amp;L+Div</th><th class="r">P&amp;L+Div%</th></tr></thead><tbody>'+rows.map(function(h,i){
     var portPct=mv>0?(h.mv/mv*100).toFixed(2):'0.00';
     var totalDivUSD=totalDivReceivedUSD(h.ticker);
-    var totalDivBase=toBase(totalDivUSD);
+    // Use original currency (not base) for Cost, Div, P&L+Div, P&L+Div%
+    var hCur=h.currency||'USD';
+    var hFx=FX[hCur]||1;
+    var totalDivOrig=totalDivUSD*hFx;
+    var costOrig=h.totalCostUSD*hFx;
+    var mvOrig=h.mv*hFx;
+    var pnlOrig=h.pnl*hFx;
+    // CostY% and CurrY% still use base currency ratios (div received / cost or mv)
     var costBase=toBase(h.totalCostUSD);
     var mvBase=toBase(h.mv);
-    var pnlBase=toBase(h.pnl);
+    var totalDivBase=toBase(totalDivUSD);
     var costY=costBase>0?(totalDivBase/costBase*100).toFixed(2):'0.00';
     var currY=mvBase>0?(totalDivBase/mvBase*100).toFixed(2):'0.00';
-    var plDiv=pnlBase+totalDivBase;
-    var plDivPct=costBase>0?(plDiv/costBase*100):0;
-    var plDivColor=plDiv>=0?'var(--green)':'var(--red)';
+    var plDivOrig=pnlOrig+totalDivOrig;
+    var plDivPct=costOrig>0?(plDivOrig/costOrig*100):0;
+    var plDivColor=plDivOrig>=0?'var(--green)':'var(--red)';
     var plDivPctColor=plDivPct>=0?'var(--green)':'var(--red)';
-    var divDisplay=totalDivBase>0?('<span class="pos">'+baseCurrency+' '+totalDivBase.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</span>'):'--';
-    var plDivStr=(plDiv>=0?'+':'')+baseCurrency+' '+Math.abs(plDiv).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    // Div: always positive, plain white, original currency
+    var divDisplay=totalDivOrig>0?(hCur+' '+totalDivOrig.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})):'--';
+    // Cost in original currency
+    var costDisplay=hCur+' '+costOrig.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    var plDivStr=(plDivOrig>=0?'+':'')+hCur+' '+Math.abs(plDivOrig).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
     var plDivPctStr=(plDivPct>=0?'+':'')+plDivPct.toFixed(2)+'%';
     var pnlBadge='<span class="badge '+(h.pct>=0?'badge-green':'badge-red')+'">'+(h.pct>=0?'+':'')+h.pct.toFixed(2)+'%</span>';
     return '<tr>'
@@ -857,9 +867,9 @@ function renderHoldings(){
       +'<td class="r">'+currY+'%</td>'
       +'<td class="r">'+((h.price||0)*(FX[h.currency]||1)).toFixed(3)+'</td>'
       +'<td>'+h.currency+'</td>'
-      +'<td class="r">'+fmt(h.totalCostUSD)+'</td>'
-      +'<td class="r">'+pnlBadge+'</td>'
+      +'<td class="r">'+costDisplay+'</td>'
       +'<td class="r">'+divDisplay+'</td>'
+      +'<td class="r">'+pnlBadge+'</td>'
       +'<td class="r" style="color:'+plDivColor+';font-weight:600">'+plDivStr+'</td>'
       +'<td class="r" style="color:'+plDivPctColor+';font-weight:600">'+plDivPctStr+'</td>'
       +'</tr>';
@@ -1022,8 +1032,8 @@ function openAddCashTx(){
   openModal('addCashTxModal');
 }
 function autoFillExchange(){const v=document.getElementById('txTicker').value;if(v.includes(':'))document.getElementById('txExchange').value=v.split(':')[0].toUpperCase();}
-function calcTotal(){const s=parseFloat(document.getElementById('txShares').value)||0,p=parseFloat(document.getElementById('txPrice').value)||0,f=parseFloat(document.getElementById('txFees').value)||0;document.getElementById('txTotal').value=(s*p+f).toFixed(2);}
-function calcEditTotal(){const s=parseFloat(document.getElementById('eShares').value)||0,p=parseFloat(document.getElementById('ePrice').value)||0,f=parseFloat(document.getElementById('eFees').value)||0;document.getElementById('eTotal').value=(s*p+f).toFixed(2);}
+function calcTotal(){const s=parseFloat(document.getElementById('txShares').value)||0,p=parseFloat(document.getElementById('txPrice').value)||0,f=parseFloat(document.getElementById('txFees').value)||0;document.getElementById('txTotal').value=(curTxAction==='Sell'?s*p-f:s*p+f).toFixed(2);}
+function calcEditTotal(){const s=parseFloat(document.getElementById('eShares').value)||0,p=parseFloat(document.getElementById('ePrice').value)||0,f=parseFloat(document.getElementById('eFees').value)||0;document.getElementById('eTotal').value=(curEditAction==='Sell'?s*p-f:s*p+f).toFixed(2);}
 
 function addTransaction(){
   const raw=document.getElementById('txTicker').value;

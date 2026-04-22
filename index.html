@@ -1165,7 +1165,11 @@ async function refreshPrices(){
           //const price=meta.regularMarketPrice,prev=meta.previousClose||price;
           const prev = meta.previousClose || price;
           const h=buildHoldings().find(function(x){return x.ticker===ticker;});
-          if(h){livePrices[ticker]=toUSD(price,h.currency);n++;}
+          if(h){
+            const calcCurrency = (meta.currency === 'GBX') ? 'GBP' : h.currency;
+            livePrices[ticker]=toUSD(price,h.currency);
+            n++;
+          }
           const w=watchlist.find(function(x){return x.ticker===ticker;});
           if(w){w.price=price;w.chg=+(price-prev).toFixed(2);w.pct=prev>0?+((price-prev)/prev*100).toFixed(2):0;}
         }

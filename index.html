@@ -571,7 +571,7 @@ const PER=20;
 let curTxAction='Buy', curEditAction='Buy', curCashAction='DEPOSIT';
 const livePrices={};
 
-const FX={USD:1,SGD:1.35,HKD:7.82,GBP:0.79,GBX:0.0079,EUR:0.92,JPY:151.2};
+const FX={USD:1,SGD:1.35,HKD:7.82,GBP:0.79,GBX:79,EUR:0.92,JPY:151.2};
 const toUSD=(a,c)=>a/(FX[c]||1);
 const toBase=u=>u*(FX[baseCurrency]||1);
 const fmt=u=>baseCurrency+' '+toBase(u).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});

@@ -1144,7 +1144,7 @@ function addAlert(){const t=document.getElementById('alTicker').value.toUpperCas
 async function refreshPrices(){
   document.getElementById('syncStatus').textContent='Syncing...';
   document.getElementById('yhStatus').textContent='Fetching prices via corsproxy.io...';
-  const tickers=[...new Set([...openH().map(function(h){return h.ticker;}),... watchlist.map(function(w){return w.ticker;})])].slice(0,12);
+  const tickers=[...new Set([...openH().map(function(h){return h.ticker;}),... watchlist.map(function(w){return w.ticker;})])].slice(0,20);
   var n=0;
   for(var i=0;i<tickers.length;i++){
     const ticker=tickers[i];
@@ -1177,7 +1177,7 @@ async function refreshPrices(){
         }
       }
     }catch(e){}
-    await new Promise(function(r){setTimeout(r,200);});
+    await new Promise(function(r){setTimeout(r,1000);});
   }
   document.getElementById('syncStatus').textContent=n?'Live ('+n+')':'Local';
   document.getElementById('yhStatus').textContent=n?'Updated '+n+' prices':'No prices returned. Check tickers.';

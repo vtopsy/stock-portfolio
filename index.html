@@ -1156,20 +1156,21 @@ async function refreshPrices(){
         const data=await res.json();
         const meta=data&&data.chart&&data.chart.result&&data.chart.result[0]&&data.chart.result[0].meta;
         if(meta&&meta.regularMarketPrice>0){
-          // --- convert GBX ---
+          const h=buildHoldings().find(function(x){return x.ticker===ticker;});
           let price = meta.regularMarketPrice;
-          // Check if Yahoo Finance reports the price in GBX (Pence)
+          let prev = meta.previousClose || price;
+          // 1. Logic for GBX to GBP conversion
           let calcCurrency = h.currency; // Default to your holding's currency
           if (meta.currency === 'GBX') {
             price = price / 100;
+            prev = prev / 100;
             calcCurrency = 'GBP'; // Force the converter to use Pound exchange rates
           }
           //const price=meta.regularMarketPrice,prev=meta.previousClose||price;
-          const prev = meta.previousClose || price;
-          const h=buildHoldings().find(function(x){return x.ticker===ticker;});
+          //const prev = meta.previousClose || price;
           if(h){
-            const calcCurrency = (meta.currency === 'GBX') ? 'GBP' : h.currency;
-            livePrices[ticker]=toUSD(price,h.currency);
+            //const calcCurrency = (meta.currency === 'GBX') ? 'GBP' : h.currency;
+            livePrices[ticker]=toUSD(price,calcCurrency);
             n++;
           }
           const w=watchlist.find(function(x){return x.ticker===ticker;});

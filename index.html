@@ -1604,8 +1604,7 @@ try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
 try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<24){Object.assign(livePrices,lp.prices);document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
 function deduplicateDividends(){
-  // Key includes amount so same-day multiple dividends (e.g. ordinary + special) are preserved
-  // Only true duplicates (same ticker + date + amount) are removed
+  // Step 1: Dedup cashTxList — keep by ticker+date+amount
   const seenCash={};
   cashTxList=cashTxList.filter(function(ct){
     if((ct.type||'').toUpperCase()!=='DIVIDEND')return true;
@@ -1615,6 +1614,8 @@ function deduplicateDividends(){
     seenCash[k]=true;
     return true;
   });
+
+  // Step 2: Dedup dividends array — keep by ticker+date+amount
   const seenDiv={};
   dividends=dividends.filter(function(d){
     const amt=parseFloat(d.amount||0).toFixed(4);
@@ -1622,6 +1623,22 @@ function deduplicateDividends(){
     if(seenDiv[k])return false;
     seenDiv[k]=true;
     return true;
+  });
+
+  // Step 3: Sync — ensure every DIVIDEND cash entry has a matching dividends record
+  // (CSV imports add to cashTxList but may not add to dividends)
+  cashTxList.forEach(function(ct){
+    if((ct.type||'').toUpperCase()!=='DIVIDEND')return;
+    if(!ct.symbol||!ct.date||!ct.amount)return;
+    const amtUSD=toUSD(parseFloat(ct.amount)||0, ct.currency||baseCurrency);
+    // Check if a dividends record already exists for this ticker+date+approx amount
+    const exists=dividends.some(function(d){
+      return d.ticker===ct.symbol && d.date===ct.date && Math.abs(d.amount-amtUSD)<0.05;
+    });
+    if(!exists){
+      const key='DIV_'+ct.symbol+'_'+ct.date+'_'+amtUSD.toFixed(4);
+      dividends.push({_key:key,ticker:ct.symbol,name:ct.stockName||ct.symbol,amount:amtUSD,date:ct.date,type:'Dividend'});
+    }
   });
 }
 deduplicateDividends();

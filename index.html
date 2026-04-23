@@ -1626,16 +1626,25 @@ function deduplicateDividends(){
   });
 
   // Step 3: Sync — ensure every DIVIDEND cash entry has a matching dividends record
-  // (CSV imports add to cashTxList but may not add to dividends)
+  // Group cash dividends by ticker+date, then compare count against dividends records
+  // This handles same-day multiple dividends (ordinary + special)
   cashTxList.forEach(function(ct){
     if((ct.type||'').toUpperCase()!=='DIVIDEND')return;
     if(!ct.symbol||!ct.date||!ct.amount)return;
     const amtUSD=toUSD(parseFloat(ct.amount)||0, ct.currency||baseCurrency);
-    // Check if a dividends record already exists for this ticker+date+approx amount
-    const exists=dividends.some(function(d){
-      return d.ticker===ct.symbol && d.date===ct.date && Math.abs(d.amount-amtUSD)<0.05;
+    // Count existing dividends records for this ticker+date
+    const existingForDate=dividends.filter(function(d){
+      return d.ticker===ct.symbol && d.date===ct.date;
     });
-    if(!exists){
+    // Count cash entries for this ticker+date (to know how many dividend records we need)
+    const cashForDate=cashTxList.filter(function(c){
+      return (c.type||'').toUpperCase()==='DIVIDEND' && c.symbol===ct.symbol && c.date===ct.date;
+    });
+    // Check if this specific amount already has a matching dividends record
+    const amtMatched=existingForDate.some(function(d){
+      return Math.abs(d.amount-amtUSD)<0.5;
+    });
+    if(!amtMatched){
       const key='DIV_'+ct.symbol+'_'+ct.date+'_'+amtUSD.toFixed(4);
       dividends.push({_key:key,ticker:ct.symbol,name:ct.stockName||ct.symbol,amount:amtUSD,date:ct.date,type:'Dividend'});
     }

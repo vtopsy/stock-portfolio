@@ -273,17 +273,23 @@ input[type=file]{display:none}
 
 <!-- DIVIDENDS -->
 <div id="dividends" class="page">
-  <div class="card">
-    <div class="card-header">
-      <span class="card-title">Dividend History</span>
-      <div class="pill-tabs" id="divPills">
-        <button class="pill active" onclick="switchDivView('annual',this)">By Year</button>
-        <button class="pill" onclick="switchDivView('monthly',this)">Monthly</button>
-        <button class="pill" onclick="switchDivView('ticker',this)">By Ticker</button>
+  <div class="grid-2">
+    <div class="card" style="margin-bottom:0">
+      <div class="card-header">
+        <span class="card-title">Dividend History</span>
+        <div class="pill-tabs" id="divPills">
+          <button class="pill active" onclick="switchDivView('annual',this)">By Year</button>
+          <button class="pill" onclick="switchDivView('monthly',this)">Monthly</button>
+          <button class="pill" onclick="switchDivView('ticker',this)">By Ticker</button>
+        </div>
       </div>
+      <div class="chart-wrap h220"><canvas id="divChart"></canvas></div>
+      <div id="divSummaryRow" style="display:flex;gap:9px;margin-top:12px;flex-wrap:wrap"></div>
     </div>
-    <div class="chart-wrap h220"><canvas id="divChart"></canvas></div>
-    <div id="divSummaryRow" style="display:flex;gap:9px;margin-top:12px;flex-wrap:wrap"></div>
+    <div class="card" style="margin-bottom:0">
+      <div class="card-header"><span class="card-title">Yearly Breakdown</span></div>
+      <div id="divYearlyTable" style="overflow-y:auto;max-height:340px"></div>
+    </div>
   </div>
   <div class="grid-2">
     <div class="card" style="margin-bottom:0">
@@ -829,7 +835,7 @@ function renderHoldings(){
   rows.forEach(function(h){const c=h.currency||'SGD';if(!byCur[c])byCur[c]={n:0,mv:0};byCur[c].n++;byCur[c].mv+=h.mv;});
   document.getElementById('holdingSummaryRow').innerHTML='<span>Beta = <b>0.0</b></span><span style="color:var(--border)">|</span><span>VaR = <b>'+(mv>0?(mv*0.024/mv*100).toFixed(2):0)+'%</b></span><span style="color:var(--border)">|</span><span>Expected Shortfall = <b>'+(mv>0?(mv*0.035/mv*100).toFixed(2):0)+'%</b></span>'+Object.entries(byCur).map(function(e){return '<span style="margin-left:8px;background:var(--bg3);border-radius:3px;padding:2px 8px;font-size:12px"><b>'+e[0]+'</b> '+e[1].n+' stocks &middot; '+fmt(e[1].mv)+'</span>';}).join('');
   if(!rows.length){document.getElementById('holdingsContent').innerHTML='<div style="text-align:center;padding:30px;color:var(--text3)">'+(holdingView==='open'?'No open positions.':'No closed positions.')+'</div>';return;}
-  document.getElementById('holdingsContent').innerHTML='<div class="tbl-wrap"><table class="tbl"><thead><tr><th>No.</th><th>Symbol</th><th>Stock Name</th><th>Port%</th><th class="r">Shares</th><th class="r">APrice</th><th class="r">CostY%</th><th class="r">CurrY%</th><th class="r">Close</th><th>Cur</th><th class="r">Cost</th><th class="r">Div</th><th class="r">P&amp;L%</th><th class="r">P&amp;L+Div</th><th class="r">P&amp;L+Div%</th></tr></thead><tbody>'+rows.map(function(h,i){
+  document.getElementById('holdingsContent').innerHTML='<div class="tbl-wrap"><table class="tbl"><thead><tr><th>No.</th><th>Symbol</th><th>Stock Name</th><th>Port%</th><th class="r">Shares</th><th class="r">APrice</th><th class="r">CostY%</th><th class="r">CurrY%</th><th class="r">Close</th><th class="r">Cost</th><th class="r">Div</th><th class="r">P&amp;L%</th><th class="r">P&amp;L+Div</th><th class="r">P&amp;L+Div%</th></tr></thead><tbody>'+rows.map(function(h,i){
     var portPct=mv>0?(h.mv/mv*100).toFixed(2):'0.00';
     var totalDivUSD=totalDivReceivedUSD(h.ticker);
     // Use original currency (not base) for Cost, Div, P&L+Div, P&L+Div%
@@ -866,7 +872,6 @@ function renderHoldings(){
       +'<td class="r">'+costY+'%</td>'
       +'<td class="r">'+currY+'%</td>'
       +'<td class="r">'+((h.price||0)*(FX[h.currency]||1)).toFixed(3)+'</td>'
-      +'<td>'+h.currency+'</td>'
       +'<td class="r">'+costDisplay+'</td>'
       +'<td class="r">'+divDisplay+'</td>'
       +'<td class="r">'+pnlBadge+'</td>'
@@ -946,6 +951,54 @@ function renderPager(id,page,pages,total,cb){
   if(e<pages)h+=(e<pages-1?'<span class="pager-info">...</span>':'')+'<button onclick="('+cb+')('+pages+')">'+pages+'</button>';
   h+='<button '+(page>=pages?'disabled':'')+' onclick="('+cb+')('+( page+1)+')">&#8250;</button><span class="pager-info">'+total+' records</span>';
   el.innerHTML=h;
+}
+
+function renderDivYearlyTable(){
+  const el=document.getElementById('divYearlyTable');
+  if(!el)return;
+  if(!dividends.length){el.innerHTML='<div style="color:var(--text3);padding:8px">No dividend records.</div>';return;}
+  // Build yearly totals in base currency
+  const ym={};
+  dividends.forEach(function(d){
+    if(!d.date)return;
+    const y=d.date.slice(0,4);
+    if(!ym[y])ym[y]={total:0};
+    ym[y].total+=d.amount;
+  });
+  const years=Object.keys(ym).sort();
+  const grandTotal=years.reduce(function(s,y){return s+ym[y].total;},0);
+  const totalMonths=years.reduce(function(s,y,i){
+    if(i<years.length-1)return s+12;
+    // current year: count months elapsed
+    const now=new Date();
+    return s+now.getMonth()+1;
+  },0);
+  const rows=years.map(function(y){
+    const tot=ym[y].total;
+    const isCurrentYear=y===new Date().getFullYear().toString();
+    const monthsInYear=isCurrentYear?new Date().getMonth()+1:12;
+    const monthly=tot/monthsInYear;
+    // Avg Cost = total cost of all open holdings at end of that year (approximation: use current cost)
+    const avgCost=toBase(totalCost());
+    const costYield=avgCost>0?(toBase(tot)/avgCost*100).toFixed(2):'--';
+    return '<tr>'
+      +'<td style="color:var(--text2)">'+y+'</td>'
+      +'<td style="color:var(--text3)">'+baseCurrency+'</td>'
+      +'<td class="r" style="color:var(--green);font-weight:600">'+toBase(tot).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'
+      +'<td class="r" style="color:var(--text2)">'+toBase(monthly).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'
+      +'<td class="r" style="color:var(--amber)">'+costYield+(costYield!=='--'?'%':'')+'</td>'
+      +'</tr>';
+  }).join('');
+  const grandMonthly=totalMonths>0?grandTotal/totalMonths:0;
+  el.innerHTML='<table class="tbl"><thead><tr><th>Year</th><th>Cur</th><th class="r">Total</th><th class="r">Monthly Avg</th><th class="r">Cost Yield</th></tr></thead><tbody>'
+    +rows
+    +'<tr style="border-top:2px solid var(--border);font-weight:700">'
+    +'<td>Total</td><td style="color:var(--text3)">'+baseCurrency+'</td>'
+    +'<td class="r" style="color:var(--green)">'+toBase(grandTotal).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'
+    +'<td class="r" style="color:var(--text2)">'+toBase(grandMonthly).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'
+    +'<td class="r">-</td>'
+    +'</tr>'
+    +'</tbody></table>';
 }
 
 function renderDivHistory(){
@@ -1192,6 +1245,7 @@ async function refreshPrices(){
   }
   document.getElementById('syncStatus').textContent=n?'Live ('+n+')':'Local';
   document.getElementById('yhStatus').textContent=n?'Updated '+n+' prices':'No prices returned. Check tickers.';
+  try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,ts:Date.now()}));}catch(e){}
   renderAll();showToast(n?n+' prices updated':'Prices unchanged');
 }
 
@@ -1508,7 +1562,7 @@ function renderAll(){
   dividends.forEach(function(d){syncDivToCash(d);});
   renderMetrics();renderTopHoldings();renderUpcomingDivs();
   renderTransactions();renderHoldings();renderCash();
-  renderDivHistory();renderCalendar();renderDripSim();
+  renderDivHistory();renderDivYearlyTable();renderCalendar();renderDripSim();
   renderAnalyticsMetrics();renderRiskMetrics();renderGeoList();renderXirr();
   renderWatchlist();renderAlerts();
   updateAllocChart();updatePLChart();updateSectorChart();
@@ -1519,6 +1573,7 @@ document.querySelectorAll('.modal-bg').forEach(function(m){m.addEventListener('c
 try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){document.getElementById('fbApiKey').value=fb.apiKey||'';document.getElementById('fbDbUrl').value=fb.databaseURL||'';firebaseConfig=fb;}}catch(e){}
 try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
+try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<24){Object.assign(livePrices,lp.prices);document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
 initCharts();renderAll();updateDivChart();
 if(firebaseConfig.databaseURL)loadFromFirebase();
 

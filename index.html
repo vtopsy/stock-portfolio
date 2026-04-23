@@ -1552,6 +1552,8 @@ async function loadFromFirebase(){
       if(data.dividends)dividends=data.dividends;
       if(data.alerts)alerts=data.alerts;
       if(data.watchlist)watchlist=data.watchlist;
+      deduplicateDividends();
+      saveToFirebase();
       renderAll();updateDivChart();
       document.getElementById('syncStatus').textContent='Loaded';
       document.getElementById('fbStatus').textContent='Loaded successfully';
@@ -1601,8 +1603,7 @@ try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){docu
 try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
 try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<24){Object.assign(livePrices,lp.prices);document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
-// Deduplicate cashTxList and dividends — remove duplicates with same ticker+date
-(function(){
+function deduplicateDividends(){
   const seenCash={};
   cashTxList=cashTxList.filter(function(ct){
     if((ct.type||'').toUpperCase()!=='DIVIDEND')return true;
@@ -1618,7 +1619,8 @@ try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){
     seenDiv[k]=true;
     return true;
   });
-})();
+}
+deduplicateDividends();
 initCharts();renderAll();updateDivChart();
 if(firebaseConfig.databaseURL)loadFromFirebase();
 

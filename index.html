@@ -629,10 +629,12 @@ const totalAnnDiv=()=>totalDivReceivedUSD();
 function cashBalances(){
   const bal={};
   cashTxList.forEach(ct=>{
-    const cur=ct.currency||'SGD';
+    var cur=ct.currency||'SGD';
+    var a=parseFloat(ct.amount)||0;
+    // Normalize GBX (pence) to GBP
+    if(cur==='GBX'){cur='GBP';a=a/100;}
     if(!bal[cur])bal[cur]=0;
     const t=(ct.type||'').toUpperCase();
-    const a=parseFloat(ct.amount)||0;
     if(['DEPOSIT','DIVIDEND','SELL'].includes(t))bal[cur]+=a;
     else if(['WITHDRAWAL','BUY'].includes(t))bal[cur]-=a;
   });
@@ -998,7 +1000,12 @@ function renderDivYearlyTable(){
 
 function renderDivHistory(){
   document.getElementById('divHistBody').innerHTML=dividends.length
-    ?'<table class="tbl"><thead><tr><th>Date</th><th>Ticker</th><th>Name</th><th class="r">Amount</th></tr></thead><tbody>'+[...dividends].sort(function(a,b){return new Date(b.date)-new Date(a.date);}).map(function(d){return '<tr><td style="color:var(--text2)">'+d.date+'</td><td><b>'+d.ticker+'</b></td><td style="color:var(--text2)">'+(d.name||'--')+'</td><td class="r pos">+'+fmt(d.amount)+'</td></tr>';}).join('')+'</tbody></table>'
+    ?'<table class="tbl"><thead><tr><th>Date</th><th>Ticker</th><th>Name</th><th class="r">Amount</th></tr></thead><tbody>'+[...dividends].sort(function(a,b){return new Date(b.date)-new Date(a.date);}).map(function(d){
+      // Find matching cash entry to get original currency and amount
+      const ct=cashTxList.find(function(c){return (c.type||'').toUpperCase()==='DIVIDEND'&&c.symbol===d.ticker&&c.date===d.date&&Math.abs(toUSD(parseFloat(c.amount)||0,c.currency||baseCurrency)-d.amount)<0.5;});
+      const dispAmt=ct?(ct.currency+' '+parseFloat(ct.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})):fmt(d.amount);
+      return '<tr><td style="color:var(--text2)">'+d.date+'</td><td><b>'+d.ticker+'</b></td><td style="color:var(--text2)">'+(d.name||'--')+'</td><td class="r pos">+'+dispAmt+'</td></tr>';
+    }).join('')+'</tbody></table>'
     :'<div style="color:var(--text3);padding:8px 0">No dividend records.</div>';
 }
 
@@ -1257,6 +1264,22 @@ async function refreshPrices(){
               if(dividends.some(function(d){return d.ticker===ticker&&d.date===evDate&&Math.abs(d.amount-totalUSD)<0.01;}))return;
               // Skip if ticker+date+amount already exists in cash transactions
               if(cashTxList.some(function(ct){return (ct.type||'').toUpperCase()==='DIVIDEND'&&ct.symbol===ticker&&ct.date===evDate&&Math.abs(parseFloat(ct.amount||0)-totalOrig)<0.01;}))return;
+              // Skip if a dividend of similar amount already exists within 60 days (ex-date vs payment date)
+              // This prevents Yahoo ex-date entries duplicating imported payment-date entries
+              const evTime=new Date(evDate).getTime();
+              const nearbyExists=dividends.some(function(d){
+                if(d.ticker!==ticker)return false;
+                const daysDiff=Math.abs(new Date(d.date).getTime()-evTime)/(1000*60*60*24);
+                return daysDiff<=60&&Math.abs(d.amount-totalUSD)<(totalUSD*0.1+0.5);
+              });
+              if(nearbyExists)return;
+              const nearbyCash=cashTxList.some(function(ct){
+                if((ct.type||'').toUpperCase()!=='DIVIDEND'||ct.symbol!==ticker)return false;
+                const daysDiff=Math.abs(new Date(ct.date).getTime()-evTime)/(1000*60*60*24);
+                const ctAmtUSD=toUSD(parseFloat(ct.amount)||0,ct.currency||baseCurrency);
+                return daysDiff<=60&&Math.abs(ctAmtUSD-totalUSD)<(totalUSD*0.1+0.5);
+              });
+              if(nearbyCash)return;
               // Add to dividends list
               dividends.push({_key:divKey,ticker:ticker,name:hName,amount:totalUSD,date:evDate,type:'Dividend',auto:true});
               // Add to cash transactions in original currency
@@ -1623,6 +1646,20 @@ function deduplicateDividends(){
     if(seenDiv[k])return false;
     seenDiv[k]=true;
     return true;
+  });
+
+  // Step 2b: Remove auto-pulled Yahoo ex-date entries that duplicate an imported payment-date entry
+  // (identified by auto:true flag and having a nearby cash entry within 60 days)
+  dividends=dividends.filter(function(d){
+    if(!d.auto)return true; // keep manually imported entries always
+    const dTime=new Date(d.date).getTime();
+    const hasCashNearby=cashTxList.some(function(ct){
+      if((ct.type||'').toUpperCase()!=='DIVIDEND'||ct.symbol!==d.ticker)return false;
+      const daysDiff=Math.abs(new Date(ct.date).getTime()-dTime)/(1000*60*60*24);
+      const ctAmtUSD=toUSD(parseFloat(ct.amount)||0,ct.currency||baseCurrency);
+      return daysDiff<=60&&Math.abs(ctAmtUSD-d.amount)<(d.amount*0.1+0.5);
+    });
+    return !hasCashNearby; // remove if a nearby cash entry covers it
   });
 
   // Step 3: Sync — ensure every DIVIDEND cash entry has a matching dividends record

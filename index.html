@@ -640,14 +640,7 @@ function cashBalances(){
 }
 const totalCashUSD=()=>Object.entries(cashBalances()).reduce((s,[c,a])=>s+toUSD(a,c),0);
 
-function syncDivToCash(div){
-  const key='DIV_'+div.ticker+'_'+div.date+'_'+div.amount.toFixed(4);
-  if(cashTxList.some(ct=>ct._key===key))return;
-  const h=openH().find(x=>x.ticker===div.ticker);
-  const origCur=(h&&h.currency)||baseCurrency;
-  const origAmt=parseFloat((div.amount*(FX[origCur]||1)).toFixed(2));
-  cashTxList.push({_key:key,type:'DIVIDEND',date:div.date,currency:origCur,amount:origAmt,details:'Dividend payout from '+(div.name||div.ticker),symbol:div.ticker,stockName:div.name||div.ticker,portfolio:h?h.exchange:'--'});
-}
+
 
 // ===================== CHARTS =====================
 let portfolioChart,allocChart,divChart,plChart,sectorChart;
@@ -1598,7 +1591,6 @@ function clearAllData(){if(!confirm('Clear ALL data?'))return;transactions=[];ca
 // ===================== RENDER ALL =====================
 function renderCash(){renderCashBalances();renderCashTx();}
 function renderAll(){
-  dividends.forEach(function(d){syncDivToCash(d);});
   renderMetrics();renderTopHoldings();renderUpcomingDivs();
   renderTransactions();renderHoldings();renderCash();
   renderDivHistory();renderDivYearlyTable();renderCalendar();renderDripSim();
@@ -1613,25 +1605,24 @@ try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){docu
 try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
 try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<24){Object.assign(livePrices,lp.prices);document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
+// Deduplicate cashTxList — remove duplicate DIVIDEND entries with same ticker+date
+(function(){
+  const seen={};
+  cashTxList=cashTxList.filter(function(ct){
+    if((ct.type||'').toUpperCase()!=='DIVIDEND')return true;
+    const k=(ct.symbol||'')+'_'+(ct.date||'');
+    if(seen[k])return false;
+    seen[k]=true;
+    return true;
+  });
+})();
 initCharts();renderAll();updateDivChart();
 if(firebaseConfig.databaseURL)loadFromFirebase();
 
 // ===================== DIVIDEND SCHEDULER =====================
 function checkUpcomingDividends(){
-  const todayStr=today();
-  dividends.forEach(function(div){
-    if(!div.date||div.date>todayStr)return;
-    const cashKey='DIV_'+div.ticker+'_'+div.date+'_'+div.amount.toFixed(4);
-    const alreadyInCash=cashTxList.some(function(ct){return ct._key===cashKey;});
-    if(!alreadyInCash){
-      const h=openH().find(function(x){return x.ticker===div.ticker;});
-      const origCur=(h&&h.currency)||baseCurrency;
-      const origAmt=parseFloat((div.amount*(FX[origCur]||1)).toFixed(2));
-      cashTxList.push({_key:cashKey,type:'DIVIDEND',date:div.date,currency:origCur,amount:origAmt,details:'Dividend payout from '+(div.name||div.ticker),symbol:div.ticker,stockName:div.name||div.ticker,portfolio:h?h.exchange:'--'});
-      showToast('Dividend auto-added to cash: '+div.ticker);
-      renderCash();renderMetrics();saveToFirebase();
-    }
-  });
+  // No-op: dividend cash entries are now created exclusively during refreshPrices
+  // and during CSV import. This prevents duplicates from multiple creation paths.
 }
 checkUpcomingDividends();
 setInterval(checkUpcomingDividends,60000);

@@ -1663,29 +1663,37 @@ function deduplicateDividends(){
     return true;
   });
 
-  // Step 2b: Remove dividend entries that duplicate imported cash payment-date entries
-  // Check if sum of all cash dividends for same ticker within 60 days covers this dividend amount
+  // Step 2b: Remove auto-added (Yahoo) dividend+cash entries that duplicate imported ones
+  // An auto entry is a duplicate if a non-auto cash entry exists within 60 days for same ticker
+  const cashToRemoveKeys=new Set();
   const divToRemove=new Set();
   dividends.forEach(function(d,idx){
+    if(!d.auto)return; // only clean up Yahoo auto entries
     const dTime=new Date(d.date).getTime();
-    // Get all cash dividend entries for this ticker within 60 days (different date)
-    const nearbyCash=cashTxList.filter(function(ct){
+    const hasImportedCashNearby=cashTxList.some(function(ct){
+      if((ct.type||'').toUpperCase()!=='DIVIDEND'||ct.symbol!==d.ticker)return false;
+      if(ct._key&&ct._key===d._key)return false; // skip self
+      const daysDiff=Math.abs(new Date(ct.date).getTime()-dTime)/(1000*60*60*24);
+      return daysDiff<=60&&!ct._key||daysDiff<=60&&ct._key&&ct._key!==d._key;
+    });
+    // Simpler: any cash dividend for same ticker within 60 days that was NOT auto-added
+    const hasManualCashNearby=cashTxList.some(function(ct){
       if((ct.type||'').toUpperCase()!=='DIVIDEND'||ct.symbol!==d.ticker)return false;
       const daysDiff=Math.abs(new Date(ct.date).getTime()-dTime)/(1000*60*60*24);
-      return daysDiff>0&&daysDiff<=60;
+      // A manual/imported entry has no _key or a different _key than this dividend
+      const isManual=!ct._key||(ct._key!==d._key);
+      return daysDiff<=60&&isManual;
     });
-    if(!nearbyCash.length)return;
-    // Sum nearby cash entries in USD
-    const nearbySumUSD=nearbyCash.reduce(function(s,ct){
-      var ctAmt=Math.abs(parseFloat(ct.amount)||0);
-      var ctCur=ct.currency||baseCurrency;
-      if(ctCur==='GBX'){ctCur='GBP';ctAmt=ctAmt/100;}
-      return s+toUSD(ctAmt,ctCur);
-    },0);
-    // Remove if nearby cash sum is within 20% of this dividend amount
-    if(Math.abs(nearbySumUSD-d.amount)<(d.amount*0.2+1))divToRemove.add(idx);
+    if(hasManualCashNearby){
+      divToRemove.add(idx);
+      if(d._key)cashToRemoveKeys.add(d._key); // also remove the matching auto cash entry
+    }
   });
   dividends=dividends.filter(function(_,idx){return !divToRemove.has(idx);});
+  // Remove auto-added cash entries that share the same _key as removed dividend entries
+  cashTxList=cashTxList.filter(function(ct){
+    return !ct._key||!cashToRemoveKeys.has(ct._key);
+  });
 
   // Step 3: Sync — ensure every DIVIDEND cash entry has a matching dividends record
   // Group cash dividends by ticker+date, then compare count against dividends records

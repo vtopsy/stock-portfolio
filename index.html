@@ -1275,26 +1275,26 @@ async function refreshPrices(){
               if(totalOrig<=0)return;
               const totalUSD=toUSD(totalOrig,hCur);
               const divKey='DIV_'+ticker+'_'+evDate+'_'+totalUSD.toFixed(4);
-              // Skip if ticker+date+amount already exists in dividends
-              if(dividends.some(function(d){return d.ticker===ticker&&d.date===evDate&&Math.abs(d.amount-totalUSD)<0.01;}))return;
-              // Skip if ticker+date+amount already exists in cash transactions
-              if(cashTxList.some(function(ct){return (ct.type||'').toUpperCase()==='DIVIDEND'&&ct.symbol===ticker&&ct.date===evDate&&Math.abs(parseFloat(ct.amount||0)-totalOrig)<0.01;}))return;
-              // Skip if a dividend of similar amount already exists within 60 days (ex-date vs payment date)
-              // This prevents Yahoo ex-date entries duplicating imported payment-date entries
+              // Skip if exact ticker+date already exists in dividends
+              if(dividends.some(function(d){return d.ticker===ticker&&d.date===evDate;}))return;
+              // Skip if exact ticker+date already exists in cash transactions
+              if(cashTxList.some(function(ct){return (ct.type||'').toUpperCase()==='DIVIDEND'&&ct.symbol===ticker&&ct.date===evDate;}))return;
+              // Skip if ANY cash dividend exists within 60 days for this ticker
+              // Cash CSV is the source of truth — Yahoo only fills gaps with no cash entry at all
               const evTime=new Date(evDate).getTime();
-              const nearbyExists=dividends.some(function(d){
-                if(d.ticker!==ticker)return false;
-                const daysDiff=Math.abs(new Date(d.date).getTime()-evTime)/(1000*60*60*24);
-                return daysDiff<=60&&Math.abs(d.amount-totalUSD)<(totalUSD*0.1+0.5);
-              });
-              if(nearbyExists)return;
-              const nearbyCash=cashTxList.some(function(ct){
+              const hasCashNearby=cashTxList.some(function(ct){
                 if((ct.type||'').toUpperCase()!=='DIVIDEND'||ct.symbol!==ticker)return false;
                 const daysDiff=Math.abs(new Date(ct.date).getTime()-evTime)/(1000*60*60*24);
-                const ctAmtUSD=toUSD(parseFloat(ct.amount)||0,ct.currency||baseCurrency);
-                return daysDiff<=60&&Math.abs(ctAmtUSD-totalUSD)<(totalUSD*0.1+0.5);
+                return daysDiff<=60;
               });
-              if(nearbyCash)return;
+              if(hasCashNearby)return;
+              // Skip if ANY dividend entry exists within 60 days for this ticker (auto or imported)
+              const hasDivNearby=dividends.some(function(d){
+                if(d.ticker!==ticker)return false;
+                const daysDiff=Math.abs(new Date(d.date).getTime()-evTime)/(1000*60*60*24);
+                return daysDiff<=60;
+              });
+              if(hasDivNearby)return;
               // Add to dividends list
               dividends.push({_key:divKey,ticker:ticker,name:hName,amount:totalUSD,date:evDate,type:'Dividend',auto:true});
               // Add to cash transactions in original currency

@@ -1253,14 +1253,10 @@ async function refreshPrices(){
               if(totalOrig<=0)return;
               const totalUSD=toUSD(totalOrig,hCur);
               const divKey='DIV_'+ticker+'_'+evDate+'_'+totalUSD.toFixed(4);
-              // Skip if already recorded by key
-              if(dividends.some(function(d){return d._key===divKey;}))return;
-              // Skip if a cash entry with matching ticker+date already exists (manually entered)
-              if(cashTxList.some(function(ct){return ct.type==='DIVIDEND'&&ct.symbol===ticker&&ct.date===evDate;}))return;
-              // Skip if this date is on or before the latest dividend already recorded for this ticker
-              const existingDates=dividends.filter(function(d){return d.ticker===ticker;}).map(function(d){return d.date||'';});
-              const latestExisting=existingDates.length?existingDates.sort().pop():'';
-              if(latestExisting&&evDate<=latestExisting)return;
+              // Skip if ticker+date already exists in dividends (regardless of key)
+              if(dividends.some(function(d){return d.ticker===ticker&&d.date===evDate;}))return;
+              // Skip if ticker+date already exists in cash transactions (imported entries have no _key)
+              if(cashTxList.some(function(ct){return (ct.type||'').toUpperCase()==='DIVIDEND'&&ct.symbol===ticker&&ct.date===evDate;}))return;
               // Add to dividends list
               dividends.push({_key:divKey,ticker:ticker,name:hName,amount:totalUSD,date:evDate,type:'Dividend',auto:true});
               // Add to cash transactions in original currency
@@ -1605,14 +1601,21 @@ try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){docu
 try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
 try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<24){Object.assign(livePrices,lp.prices);document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
-// Deduplicate cashTxList — remove duplicate DIVIDEND entries with same ticker+date
+// Deduplicate cashTxList and dividends — remove duplicates with same ticker+date
 (function(){
-  const seen={};
+  const seenCash={};
   cashTxList=cashTxList.filter(function(ct){
     if((ct.type||'').toUpperCase()!=='DIVIDEND')return true;
     const k=(ct.symbol||'')+'_'+(ct.date||'');
-    if(seen[k])return false;
-    seen[k]=true;
+    if(seenCash[k])return false;
+    seenCash[k]=true;
+    return true;
+  });
+  const seenDiv={};
+  dividends=dividends.filter(function(d){
+    const k=(d.ticker||'')+'_'+(d.date||'');
+    if(seenDiv[k])return false;
+    seenDiv[k]=true;
     return true;
   });
 })();

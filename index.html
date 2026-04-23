@@ -906,18 +906,24 @@ function renderCashBalances(){
     ?Object.entries(bal).map(function(e){return '<div class="bal-pill"><span class="cur">'+e[0]+'</span><span class="amt">'+e[1].toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</span></div>';}).join('')
     :'<span style="color:var(--text3)">No cash transactions yet.</span>';
   const tc=totalCashUSD();
-  // Use Math.abs and normalize GBX to avoid double-counting negative amounts or pence values
-  const tin=cashTxList.filter(function(t){return['DEPOSIT','DIVIDEND','SELL'].includes((t.type||'').toUpperCase());}).reduce(function(s,t){
-    var cur=t.currency||'SGD'; var amt=Math.abs(parseFloat(t.amount)||0);
-    if(cur==='GBX'){cur='GBP';amt=amt/100;}
-    return s+toUSD(amt,cur);
-  },0);
-  const tout=cashTxList.filter(function(t){return['WITHDRAWAL','BUY'].includes((t.type||'').toUpperCase());}).reduce(function(s,t){
-    var cur=t.currency||'SGD'; var amt=Math.abs(parseFloat(t.amount)||0);
-    if(cur==='GBX'){cur='GBP';amt=amt/100;}
-    return s+toUSD(amt,cur);
-  },0);
-  document.getElementById('cashMetrics').innerHTML='<div class="metric m-amber"><div class="metric-label">Total Cash</div><div class="metric-value">'+fmt(tc)+'</div></div><div class="metric m-green"><div class="metric-label">Total Deposits</div><div class="metric-value pos">+'+fmt(tin)+'</div></div><div class="metric m-red"><div class="metric-label">Withdrawals</div><div class="metric-value neg">-'+fmt(tout)+'</div></div><div class="metric m-cyan"><div class="metric-label">Net Flow</div><div class="metric-value '+(tin-tout>=0?'pos':'neg')+'">'+(tin-tout>=0?'+':'')+fmt(tin-tout)+'</div></div>';
+  function cashSum(types){
+    return cashTxList.filter(function(t){return types.includes((t.type||'').toUpperCase());}).reduce(function(s,t){
+      var cur=t.currency||'SGD'; var amt=Math.abs(parseFloat(t.amount)||0);
+      if(cur==='GBX'){cur='GBP';amt=amt/100;}
+      return s+toUSD(amt,cur);
+    },0);
+  }
+  const tDeposit=cashSum(['DEPOSIT']);
+  const tWithdraw=cashSum(['WITHDRAWAL']);
+  const tin=cashSum(['DEPOSIT','DIVIDEND','SELL']);
+  const tout=cashSum(['WITHDRAWAL','BUY']);
+  document.getElementById('cashMetrics').innerHTML=
+    '<div class="metric m-amber"><div class="metric-label">Total Cash</div><div class="metric-value">'+fmt(tc)+'</div></div>'
+   +'<div class="metric m-green"><div class="metric-label">Deposits</div><div class="metric-value pos">+'+fmt(tDeposit)+'</div></div>'
+   +'<div class="metric m-red"><div class="metric-label">Withdrawals</div><div class="metric-value neg">-'+fmt(tWithdraw)+'</div></div>'
+   +'<div class="metric m-cyan"><div class="metric-label">Total Inflows</div><div class="metric-sub" style="font-size:10px;color:var(--text3)">Deposits+Divs+Sells</div><div class="metric-value pos">+'+fmt(tin)+'</div></div>'
+   +'<div class="metric m-purple"><div class="metric-label">Total Outflows</div><div class="metric-sub" style="font-size:10px;color:var(--text3)">Withdrawals+Buys</div><div class="metric-value neg">-'+fmt(tout)+'</div></div>'
+   +'<div class="metric m-teal"><div class="metric-label">Net Flow</div><div class="metric-value '+(tin-tout>=0?'pos':'neg')+'">'+(tin-tout>=0?'+':'')+fmt(tin-tout)+'</div></div>';
 }
 
 function renderCashTx(){
@@ -1657,23 +1663,27 @@ function deduplicateDividends(){
     return true;
   });
 
-  // Step 2b: Remove dividend entries that duplicate an imported cash payment-date entry
-  // A dividend entry is a duplicate if a cash DIVIDEND exists within 60 days with similar amount
-  // We keep the cash entry as source of truth; the dividends array is rebuilt from it in Step 3
+  // Step 2b: Remove dividend entries that duplicate imported cash payment-date entries
+  // Check if sum of all cash dividends for same ticker within 60 days covers this dividend amount
   const divToRemove=new Set();
   dividends.forEach(function(d,idx){
     const dTime=new Date(d.date).getTime();
-    const hasCashNearby=cashTxList.some(function(ct){
+    // Get all cash dividend entries for this ticker within 60 days (different date)
+    const nearbyCash=cashTxList.filter(function(ct){
       if((ct.type||'').toUpperCase()!=='DIVIDEND'||ct.symbol!==d.ticker)return false;
       const daysDiff=Math.abs(new Date(ct.date).getTime()-dTime)/(1000*60*60*24);
-      if(daysDiff===0)return false; // exact date match — not a duplicate, handled by dedup
+      return daysDiff>0&&daysDiff<=60;
+    });
+    if(!nearbyCash.length)return;
+    // Sum nearby cash entries in USD
+    const nearbySumUSD=nearbyCash.reduce(function(s,ct){
       var ctAmt=Math.abs(parseFloat(ct.amount)||0);
       var ctCur=ct.currency||baseCurrency;
       if(ctCur==='GBX'){ctCur='GBP';ctAmt=ctAmt/100;}
-      const ctAmtUSD=toUSD(ctAmt,ctCur);
-      return daysDiff<=60&&Math.abs(ctAmtUSD-d.amount)<(d.amount*0.15+1);
-    });
-    if(hasCashNearby)divToRemove.add(idx);
+      return s+toUSD(ctAmt,ctCur);
+    },0);
+    // Remove if nearby cash sum is within 20% of this dividend amount
+    if(Math.abs(nearbySumUSD-d.amount)<(d.amount*0.2+1))divToRemove.add(idx);
   });
   dividends=dividends.filter(function(_,idx){return !divToRemove.has(idx);});
 

@@ -365,7 +365,7 @@ input[type=file]{display:none}
       <div class="setup-box">
         <h4>Yahoo Finance (via corsproxy.io)</h4>
         <p>Prices fetched via corsproxy.io — works on GitHub Pages with no API key needed.</p>
-        <button class="btn btn-primary btn-sm" onclick="refreshPrices()">Refresh Prices Now</button>
+        <div style="display:flex;gap:7px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="refreshPrices()">↻ Refresh Prices &amp; Dividends</button></div>
         <div id="yhStatus" style="font-size:var(--fs-xs);margin-top:6px;color:var(--text3)"></div>
       </div>
       <div class="setup-box">
@@ -1208,47 +1208,84 @@ function addAlert(){const t=document.getElementById('alTicker').value.toUpperCas
 // ===================== LIVE PRICES via corsproxy.io =====================
 async function refreshPrices(){
   document.getElementById('syncStatus').textContent='Syncing...';
-  document.getElementById('yhStatus').textContent='Fetching prices via corsproxy.io...';
+  document.getElementById('yhStatus').textContent='Fetching prices & dividends via corsproxy.io...';
   const tickers=[...new Set([...openH().map(function(h){return h.ticker;}),... watchlist.map(function(w){return w.ticker;})])].slice(0,20);
-  var n=0;
+  var n=0, divAdded=0;
   for(var i=0;i<tickers.length;i++){
     const ticker=tickers[i];
     try{
-      const url='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(ticker)+'?interval=1d&range=2d';
+      // Use 3mo range with events=dividends — just enough to catch recent/upcoming payouts
+      // We only add dividends AFTER the latest one already recorded for this ticker
+      const url='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(ticker)+'?interval=1d&range=3mo&events=dividends';
       const proxy='https://corsproxy.io/?'+encodeURIComponent(url);
       const res=await fetch(proxy);
       if(res.ok){
         const data=await res.json();
-        const meta=data&&data.chart&&data.chart.result&&data.chart.result[0]&&data.chart.result[0].meta;
+        const result=data&&data.chart&&data.chart.result&&data.chart.result[0];
+        const meta=result&&result.meta;
         if(meta&&meta.regularMarketPrice>0){
           const h=buildHoldings().find(function(x){return x.ticker===ticker;});
           let price = meta.regularMarketPrice;
           let prev = meta.previousClose || price;
-          // 1. Logic for GBX to GBP conversion
-          let calcCurrency = h.currency; // Default to your holding's currency
-          if (meta.currency === 'GBX' || meta.currency === 'GBp' || (h && h.exchange === 'LSE')) {
+          let calcCurrency = h ? h.currency : 'USD';
+          const isLSE = (h && h.exchange === 'LSE') || meta.currency === 'GBX' || meta.currency === 'GBp';
+          if(isLSE){
             price = price / 100;
             prev = prev / 100;
             calcCurrency = 'GBP';
           }
-          //const price=meta.regularMarketPrice,prev=meta.previousClose||price;
-          //const prev = meta.previousClose || price;
           if(h){
-            //const calcCurrency = (meta.currency === 'GBX') ? 'GBP' : h.currency;
             livePrices[ticker]=toUSD(price,calcCurrency);
             n++;
           }
           const w=watchlist.find(function(x){return x.ticker===ticker;});
           if(w){w.price=price;w.chg=+(price-prev).toFixed(2);w.pct=prev>0?+((price-prev)/prev*100).toFixed(2):0;}
+
+          // ── Process dividend events ──
+          const divEvents=result.events&&result.events.dividends;
+          if(divEvents&&h){
+            const hName=h.name||ticker;
+            const hCur=isLSE?'GBP':(h.currency||'USD');
+            const todayStr=today();
+            Object.values(divEvents).forEach(function(ev){
+              // ev.date is a Unix timestamp, ev.amount is per-share dividend
+              const evDate=new Date(ev.date*1000).toISOString().split('T')[0];
+              // Only process if on or before today and holding had shares at that time
+              if(evDate>todayStr)return;
+              // Amount per share in original currency (LSE: pence → pounds)
+              var amtPerShare=parseFloat(ev.amount)||0;
+              if(isLSE) amtPerShare=amtPerShare/100;
+              // Total dividend = amtPerShare * shares held
+              const totalOrig=parseFloat((amtPerShare*h.shares).toFixed(4));
+              if(totalOrig<=0)return;
+              const totalUSD=toUSD(totalOrig,hCur);
+              const divKey='DIV_'+ticker+'_'+evDate+'_'+totalUSD.toFixed(4);
+              // Skip if already recorded by key
+              if(dividends.some(function(d){return d._key===divKey;}))return;
+              // Skip if a cash entry with matching ticker+date already exists (manually entered)
+              if(cashTxList.some(function(ct){return ct.type==='DIVIDEND'&&ct.symbol===ticker&&ct.date===evDate;}))return;
+              // Skip if this date is on or before the latest dividend already recorded for this ticker
+              const existingDates=dividends.filter(function(d){return d.ticker===ticker;}).map(function(d){return d.date||'';});
+              const latestExisting=existingDates.length?existingDates.sort().pop():'';
+              if(latestExisting&&evDate<=latestExisting)return;
+              // Add to dividends list
+              dividends.push({_key:divKey,ticker:ticker,name:hName,amount:totalUSD,date:evDate,type:'Dividend',auto:true});
+              // Add to cash transactions in original currency
+              const cashAmt=parseFloat(totalOrig.toFixed(2));
+              cashTxList.push({_key:divKey,type:'DIVIDEND',date:evDate,currency:hCur,amount:cashAmt,details:'Dividend: '+amtPerShare.toFixed(4)+' per share × '+h.shares+' shares',symbol:ticker,stockName:hName,portfolio:h.exchange});
+              divAdded++;
+            });
+          }
         }
       }
     }catch(e){console.error("Error fetching " + ticker, e);}
-    await new Promise(function(r){setTimeout(r,1000);});
+    await new Promise(function(r){setTimeout(r,1200);});
   }
+  if(divAdded>0){saveToFirebase();}
   document.getElementById('syncStatus').textContent=n?'Live ('+n+')':'Local';
-  document.getElementById('yhStatus').textContent=n?'Updated '+n+' prices':'No prices returned. Check tickers.';
+  document.getElementById('yhStatus').textContent=(n?'Updated '+n+' prices':'No prices returned')+( divAdded?' · '+divAdded+' dividends added':'');
   try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,ts:Date.now()}));}catch(e){}
-  renderAll();showToast(n?n+' prices updated':'Prices unchanged');
+  renderAll();updateDivChart();showToast(n?n+' prices'+(divAdded?' + '+divAdded+' dividends':'')+' updated':'Prices unchanged');
 }
 
 // ===================== CSV =====================

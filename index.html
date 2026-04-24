@@ -1053,11 +1053,17 @@ function renderDivYearlyTable(){
 
 function renderDivHistory(){
   document.getElementById('divHistBody').innerHTML=dividends.length
-    ?'<table class="tbl"><thead><tr><th>Date</th><th>Ticker</th><th>Name</th><th class="r">Amount</th></tr></thead><tbody>'+[...dividends].sort(function(a,b){return new Date(b.date)-new Date(a.date);}).map(function(d){
-      // Find matching cash entry to get original currency and amount
+    ?'<table class="tbl"><thead><tr><th>Pay Date</th><th>Ex-Date</th><th>Ticker</th><th>Name</th><th class="r">Amount</th></tr></thead><tbody>'+[...dividends].sort(function(a,b){return new Date(b.date)-new Date(a.date);}).map(function(d){
       const ct=cashTxList.find(function(c){return (c.type||'').toUpperCase()==='DIVIDEND'&&c.symbol===d.ticker&&c.date===d.date&&Math.abs(toUSD(parseFloat(c.amount)||0,c.currency||baseCurrency)-d.amount)<0.5;});
       const dispAmt=ct?(ct.currency+' '+parseFloat(ct.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})):fmt(d.amount);
-      return '<tr><td style="color:var(--text2)">'+d.date+'</td><td><b>'+d.ticker+'</b></td><td style="color:var(--text2)">'+(d.name||'--')+'</td><td class="r pos">+'+dispAmt+'</td></tr>';
+      const exDate=d.exDate||liveExDates[d.ticker]||'--';
+      return '<tr>'
+        +'<td style="color:var(--text2)">'+d.date+'</td>'
+        +'<td style="color:var(--text3);font-size:12px">'+exDate+'</td>'
+        +'<td><b>'+d.ticker+'</b></td>'
+        +'<td style="color:var(--text2)">'+(d.name||'--')+'</td>'
+        +'<td class="r pos">+'+dispAmt+'</td>'
+        +'</tr>';
     }).join('')+'</tbody></table>'
     :'<div style="color:var(--text3);padding:8px 0">No dividend records.</div>';
 }
@@ -1403,6 +1409,8 @@ async function refreshPrices(){
   document.getElementById('syncStatus').textContent=n?'Live ('+n+')':'Local';
   document.getElementById('yhStatus').textContent=(n?'Updated '+n+' prices':'No prices returned')+( divAdded?' · '+divAdded+' dividends added':'');
   try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:Date.now()}));}catch(e){}
+  // Re-render holdings now that liveExDates is populated (for XD badges)
+  renderHoldings();
   // Check pendingDividends — add any whose payment date has arrived
   const todayNow=today();
   pendingDividends=pendingDividends.filter(function(p){

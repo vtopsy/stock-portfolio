@@ -592,6 +592,7 @@ const today=()=>new Date().toISOString().split('T')[0];
 function totalDivReceivedUSD(ticker){
   return dividends
     .filter(function(d){
+      if(d.upcoming||d.date>today())return false; // exclude upcoming
       if(!ticker)return true;
       return (d.ticker||'').trim().toUpperCase()===(ticker||'').trim().toUpperCase();
     })
@@ -1055,14 +1056,19 @@ function renderDivHistory(){
   document.getElementById('divHistBody').innerHTML=dividends.length
     ?'<table class="tbl"><thead><tr><th>Pay Date</th><th>Ex-Date</th><th>Ticker</th><th>Name</th><th class="r">Amount</th></tr></thead><tbody>'+[...dividends].sort(function(a,b){return new Date(b.date)-new Date(a.date);}).map(function(d){
       const ct=cashTxList.find(function(c){return (c.type||'').toUpperCase()==='DIVIDEND'&&c.symbol===d.ticker&&c.date===d.date&&Math.abs(toUSD(parseFloat(c.amount)||0,c.currency||baseCurrency)-d.amount)<0.5;});
-      const dispAmt=ct?(ct.currency+' '+parseFloat(ct.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})):fmt(d.amount);
+      const origCur=(ct&&ct.currency)||(openH().find(function(h){return h.ticker===d.ticker;})||{}).currency||baseCurrency;
+      const origAmt=ct?parseFloat(ct.amount):(d.amount*(FX[origCur]||1));
+      const dispAmt=origCur+' '+origAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
       const exDate=d.exDate||liveExDates[d.ticker]||'--';
-      return '<tr>'
-        +'<td style="color:var(--text2)">'+d.date+'</td>'
-        +'<td style="color:var(--text3);font-size:12px">'+exDate+'</td>'
+      const isUpcoming=d.upcoming||d.date>today();
+      const rowStyle=isUpcoming?'opacity:0.6;font-style:italic':'';
+      const upcomingBadge=isUpcoming?'<span style="background:var(--amber);color:#000;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;margin-left:4px">EX</span>':'';
+      return '<tr style="'+rowStyle+'">'
+        +'<td style="color:var(--text2)">'+(isUpcoming?'--':d.date)+'</td>'
+        +'<td style="color:var(--text3);font-size:12px">'+exDate+upcomingBadge+'</td>'
         +'<td><b>'+d.ticker+'</b></td>'
         +'<td style="color:var(--text2)">'+(d.name||'--')+'</td>'
-        +'<td class="r pos">+'+dispAmt+'</td>'
+        +'<td class="r '+(isUpcoming?'':'pos')+'">'+( isUpcoming?'~':'+' )+dispAmt+'</td>'
         +'</tr>';
     }).join('')+'</tbody></table>'
     :'<div style="color:var(--text3);padding:8px 0">No dividend records.</div>';
@@ -1357,8 +1363,6 @@ async function refreshPrices(){
             Object.values(divEvents).forEach(function(ev){
               // ev.date is a Unix timestamp, ev.amount is per-share dividend
               const evDate=new Date(ev.date*1000).toISOString().split('T')[0];
-              // Only process if on or before today and holding had shares at that time
-              if(evDate>todayStr)return;
               // Amount per share in original currency (LSE: pence → pounds)
               var amtPerShare=parseFloat(ev.amount)||0;
               if(isLSE) amtPerShare=amtPerShare/100;
@@ -1369,44 +1373,36 @@ async function refreshPrices(){
               const divKey='DIV_'+ticker+'_'+evDate+'_'+totalUSD.toFixed(4);
               // Skip if user previously deleted this auto entry
               if(deletedDivKeys.has(divKey))return;
-              // Skip if exact ticker+date already exists in dividends
-              if(dividends.some(function(d){return d.ticker===ticker&&d.date===evDate;}))return;
+              // Skip if already exists in dividends (by exDate or date)
+              if(dividends.some(function(d){return d.ticker===ticker&&(d.exDate===evDate||d.date===evDate);}))return;
               // Skip if exact ticker+date already exists in cash transactions
               if(cashTxList.some(function(ct){return (ct.type||'').toUpperCase()==='DIVIDEND'&&ct.symbol===ticker&&ct.date===evDate;}))return;
-              // Skip if ANY cash dividend exists within 60 days for this ticker
-              // Also check against exDate field in case cash entry uses payment date
               const evTime=new Date(evDate).getTime();
-              const hasCashNearby=cashTxList.some(function(ct){
-                if((ct.type||'').toUpperCase()!=='DIVIDEND'||ct.symbol!==ticker)return false;
-                const dateToCheck=ct.exDate||ct.date;
-                const daysDiff=Math.abs(new Date(dateToCheck).getTime()-evTime)/(1000*60*60*24);
-                return daysDiff<=60;
-              });
-              if(hasCashNearby)return;
-              // Skip if ANY dividend entry exists within 60 days for this ticker
-              // Check both date and exDate fields
-              const hasDivNearby=dividends.some(function(d){
-                if(d.ticker!==ticker)return false;
-                const dateToCheck=d.exDate||d.date;
-                const daysDiff=Math.abs(new Date(dateToCheck).getTime()-evTime)/(1000*60*60*24);
-                return daysDiff<=60;
-              });
-              if(hasDivNearby)return;
-              // Use Yahoo's dividendDate (payment date) if available and close to ex-date
-              var useDate=evDate;
-              if(h._yahooPayDate){
-                const exTime=new Date(evDate).getTime();
-                const payTime=new Date(h._yahooPayDate).getTime();
-                const daysDiff=(payTime-exTime)/(1000*60*60*24);
-                // Use pay date if it's within 90 days after ex-date (sanity check)
-                if(daysDiff>=0&&daysDiff<=90) useDate=h._yahooPayDate;
+              const isFuture=evDate>todayStr;
+              if(!isFuture){
+                // Past/today: skip if ANY cash dividend exists within 60 days
+                const hasCashNearby=cashTxList.some(function(ct){
+                  if((ct.type||'').toUpperCase()!=='DIVIDEND'||ct.symbol!==ticker)return false;
+                  const dateToCheck=ct.exDate||ct.date;
+                  const daysDiff=Math.abs(new Date(dateToCheck).getTime()-evTime)/(1000*60*60*24);
+                  return daysDiff<=60;
+                });
+                if(hasCashNearby)return;
+                const hasDivNearby=dividends.some(function(d){
+                  if(d.ticker!==ticker)return false;
+                  const dateToCheck=d.exDate||d.date;
+                  const daysDiff=Math.abs(new Date(dateToCheck).getTime()-evTime)/(1000*60*60*24);
+                  return daysDiff<=60;
+                });
+                if(hasDivNearby)return;
               }
-              const exNote=useDate!==evDate?' (ex-date: '+evDate+')':'';
-              // Add to dividends list
-              dividends.push({_key:divKey,ticker:ticker,name:hName,amount:totalUSD,date:useDate,exDate:evDate,type:'Dividend',auto:true});
-              // Add to cash transactions in original currency
-              const cashAmt=parseFloat(totalOrig.toFixed(2));
-              cashTxList.push({_key:divKey,type:'DIVIDEND',date:useDate,currency:hCur,amount:cashAmt,details:'Dividend: '+amtPerShare.toFixed(4)+' per share × '+h.shares+' shares'+exNote,symbol:ticker,stockName:hName,portfolio:h.exchange});
+              // Add to dividends list (upcoming entries marked as upcoming:true, no cash entry yet)
+              dividends.push({_key:divKey,ticker:ticker,name:hName,amount:totalUSD,date:evDate,exDate:evDate,type:'Dividend',auto:true,upcoming:isFuture});
+              if(!isFuture){
+                // Past/today: also add cash entry
+                const cashAmt=parseFloat(totalOrig.toFixed(2));
+                cashTxList.push({_key:divKey,type:'DIVIDEND',date:evDate,currency:hCur,amount:cashAmt,details:'Dividend: '+amtPerShare.toFixed(4)+' per share × '+h.shares+' shares',symbol:ticker,stockName:hName,portfolio:h.exchange});
+              }
               divAdded++;
             });
           }

@@ -826,7 +826,7 @@ function renderHoldings(){
   renderHoldingsSummaryTable();
   const search=(document.getElementById('searchHoldings')||{value:''}).value.toLowerCase();
   const all=holdingView==='open'?openH():buildHoldings().filter(function(h){return h.shares<=0.0001;}).map(calcH);
-  const rows=all.filter(function(h){return h.ticker.toLowerCase().includes(search)||(h.name||'').toLowerCase().includes(search);});
+  const rows=all.filter(function(h){return h.ticker.toLowerCase().includes(search)||(h.name||'').toLowerCase().includes(search);}).sort(function(a,b){return b.mv-a.mv;});
   const mv=rows.reduce(function(s,h){return s+h.mv;},0);
   const byCur={};
   rows.forEach(function(h){const c=h.currency||'SGD';if(!byCur[c])byCur[c]={n:0,mv:0};byCur[c].n++;byCur[c].mv+=h.mv;});
@@ -859,9 +859,26 @@ function renderHoldings(){
     var plDivStr=(plDivOrig>=0?'+':'')+hCur+' '+Math.abs(plDivOrig).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
     var plDivPctStr=(plDivPct>=0?'+':'')+plDivPct.toFixed(2)+'%';
     var pnlBadge='<span class="badge '+(h.pct>=0?'badge-green':'badge-red')+'">'+(h.pct>=0?'+':'')+h.pct.toFixed(2)+'%</span>';
+    // XD badge: show if today is between ex-date and ex-date+3 (inclusive)
+    var xdBadge='';
+    var todayTime=new Date(today()).getTime();
+    var xdFound=dividends.filter(function(d){return d.ticker===h.ticker&&d.exDate;}).some(function(d){
+      var exTime=new Date(d.exDate).getTime();
+      var exPlus3=exTime+3*86400000;
+      return todayTime>=exTime&&todayTime<=exPlus3;
+    });
+    // Also check auto dividends where date IS the ex-date (no payDate yet)
+    if(!xdFound){
+      xdFound=dividends.filter(function(d){return d.ticker===h.ticker&&d.auto&&!d.exDate;}).some(function(d){
+        var exTime=new Date(d.date).getTime();
+        var exPlus3=exTime+3*86400000;
+        return todayTime>=exTime&&todayTime<=exPlus3;
+      });
+    }
+    if(xdFound)xdBadge='<span style="background:#e6a817;color:#000;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:5px;vertical-align:middle">XD</span>';
     return '<tr>'
       +'<td style="color:var(--text3)">'+(i+1)+'</td>'
-      +'<td><b>'+h.ticker+'</b></td>'
+      +'<td><b>'+h.ticker+'</b>'+xdBadge+'</td>'
       +'<td style="color:var(--text2)">'+h.name+'</td>'
       +'<td>'+portPct+'%</td>'
       +'<td class="r">'+h.shares.toLocaleString(undefined,{maximumFractionDigits:4})+'</td>'

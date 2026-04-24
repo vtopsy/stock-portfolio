@@ -252,7 +252,8 @@ input[type=file]{display:none}
     <div class="card-header">
       <span class="card-title">Cash Transactions <span id="cashTxCount" style="color:var(--text3);font-weight:400;font-size:11px"></span></span>
       <div style="display:flex;gap:7px;align-items:center">
-        <select id="cashTxFilterType" onchange="renderCashTx()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--rsm);padding:7px 9px;font-size:var(--fs-sm);outline:none">
+        <input id="cashTxSearch" type="text" placeholder="Search symbol..." oninput="cashPage=1;renderCashTx()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--rsm);padding:7px 9px;font-size:var(--fs-sm);outline:none;width:150px">
+        <select id="cashTxFilterType" onchange="cashPage=1;renderCashTx()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--rsm);padding:7px 9px;font-size:var(--fs-sm);outline:none">
           <option value="">All Types</option>
           <option>DEPOSIT</option><option>WITHDRAWAL</option><option>EXCHANGE</option>
           <option>DIVIDEND</option><option>BUY</option><option>SELL</option>
@@ -953,8 +954,18 @@ function renderCashBalances(){
 
 function renderCashTx(){
   const ft=(document.getElementById('cashTxFilterType')||{value:''}).value;
+  const search=((document.getElementById('cashTxSearch')||{value:''}).value||'').toLowerCase().trim();
   const sorted=[...cashTxList].sort(function(a,b){return new Date(b.date)-new Date(a.date);});
-  const filtered=sorted.filter(function(ct){return !ft||(ct.type||'').toUpperCase()===ft.toUpperCase();});
+  const filtered=sorted.filter(function(ct){
+    if(ft&&(ct.type||'').toUpperCase()!==ft.toUpperCase())return false;
+    if(search){
+      const sym=(ct.symbol||'').toLowerCase();
+      const name=(ct.stockName||'').toLowerCase();
+      const det=(ct.details||'').toLowerCase();
+      if(!sym.includes(search)&&!name.includes(search)&&!det.includes(search))return false;
+    }
+    return true;
+  });
   document.getElementById('cashTxCount').textContent='('+cashTxList.length+')';
   const total=filtered.length,pages=Math.max(1,Math.ceil(total/PER));
   if(cashPage>pages)cashPage=1;
@@ -1351,6 +1362,7 @@ async function refreshPrices(){
   document.getElementById('yhStatus').textContent=(n?'Updated '+n+' prices':'No prices returned')+( divAdded?' · '+divAdded+' dividends added':'');
   try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,ts:Date.now()}));}catch(e){}
   renderAll();updateDivChart();showToast(n?n+' prices'+(divAdded?' + '+divAdded+' dividends':'')+' updated':'Prices unchanged');
+  fetchPaymentDates();
 }
 
 
@@ -1683,6 +1695,54 @@ try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){docu
 try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
 try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<24){Object.assign(livePrices,lp.prices);if(lp.exDates)Object.assign(liveExDates,lp.exDates);document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
+async function fetchPaymentDates(){
+  // Use Yahoo quoteSummary calendarEvents to get exact payment dates
+  // This returns both exDividendDate and dividendDate (payment date)
+  const tickers=[...new Set(openH().map(function(h){return h.ticker;}))];
+  let updated=0;
+  for(var i=0;i<tickers.length;i++){
+    const ticker=tickers[i];
+    try{
+      const url='https://query1.finance.yahoo.com/v10/finance/quoteSummary/'+encodeURIComponent(ticker)+'?modules=calendarEvents';
+      const proxy='https://corsproxy.io/?'+encodeURIComponent(url);
+      const res=await fetch(proxy);
+      if(!res.ok)continue;
+      const data=await res.json();
+      const cal=data&&data.quoteSummary&&data.quoteSummary.result&&data.quoteSummary.result[0]&&data.quoteSummary.result[0].calendarEvents;
+      if(!cal)continue;
+      const exTs=cal.exDividendDate&&cal.exDividendDate.raw;
+      const payTs=cal.dividendDate&&cal.dividendDate.raw;
+      if(exTs) liveExDates[ticker]=new Date(exTs*1000).toISOString().split('T')[0];
+      if(payTs){
+        const payDate=new Date(payTs*1000).toISOString().split('T')[0];
+        const exDate=liveExDates[ticker];
+        // Update any auto dividend entry that has the ex-date as its date
+        dividends.forEach(function(d){
+          if(d.ticker!==ticker||!d.auto)return;
+          if(d.date===exDate||d.exDate===exDate||(exDate&&!d.exDate&&!d.payDate)){
+            if(d.date!==payDate){
+              // Update matching cash entry
+              const ct=cashTxList.find(function(c){return c._key===d._key;});
+              if(ct&&ct.date===d.date){
+                ct.date=payDate;
+                ct.details=(ct.details||'').replace(/ \(ex-date:[^)]*\)/,'')+' (ex-date: '+d.date+')';
+              }
+              d.exDate=d.date;
+              d.date=payDate;
+              d.payDate=payDate;
+              updated++;
+            }
+          }
+        });
+      }
+    }catch(e){console.error('fetchPaymentDates error',ticker,e);}
+    await new Promise(function(r){setTimeout(r,500);});
+  }
+  if(updated>0){saveToFirebase();renderAll();updateDivChart();showToast(updated+' dividend payment dates resolved');}
+  try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,ts:Date.now()}));}catch(e){}
+  renderAll(); // refresh XD badges with latest exDates
+}
+
 function deduplicateDividends(){
   // Step 1: Dedup cashTxList — keep by ticker+date+amount
   const seenCash={};

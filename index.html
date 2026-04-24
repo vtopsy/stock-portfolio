@@ -1335,8 +1335,18 @@ async function refreshPrices(){
           const w=watchlist.find(function(x){return x.ticker===ticker;});
           if(w){w.price=price;w.chg=+(price-prev).toFixed(2);w.pct=prev>0?+((price-prev)/prev*100).toFixed(2):0;}
           // Extract Yahoo dividendDate (payment date) and exDividendDate if available
-          if(meta.exDividendDate&&h){liveExDates[ticker]=new Date(meta.exDividendDate*1000).toISOString().split("T")[0];}
-          if(meta.dividendDate&&meta.exDividendDate&&h){const exDate=new Date(meta.exDividendDate*1000).toISOString().split("T")[0];const payDate=new Date(meta.dividendDate*1000).toISOString().split("T")[0];if(parseInt(payDate.slice(0,4))>=new Date().getFullYear()-1){const cnt=applyPaymentDate(ticker,exDate,payDate);if(cnt>0)divAdded+=cnt;}}
+          // meta.exDividendDate not available for all exchanges — extract from events instead
+          // Most recent dividend event date = latest ex-date
+          if(h){
+            const evs=result.events&&result.events.dividends;
+            if(evs){
+              const dates=Object.values(evs).map(function(ev){return new Date(ev.date*1000).toISOString().split('T')[0];}).sort();
+              if(dates.length){liveExDates[ticker]=dates[dates.length-1];}
+            }
+            // Also check meta fields as fallback (works for US stocks)
+            if(meta.exDividendDate){liveExDates[ticker]=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];}
+            if(meta.dividendDate&&meta.exDividendDate){const exDate=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];const payDate=new Date(meta.dividendDate*1000).toISOString().split('T')[0];if(parseInt(payDate.slice(0,4))>=new Date().getFullYear()-1){const cnt=applyPaymentDate(ticker,exDate,payDate);if(cnt>0)divAdded+=cnt;}}
+          }
 
           // ── Process dividend events ──
           const divEvents=result.events&&result.events.dividends;
@@ -1759,7 +1769,7 @@ document.querySelectorAll('.modal-bg').forEach(function(m){m.addEventListener('c
 try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){document.getElementById('fbApiKey').value=fb.apiKey||'';document.getElementById('fbDbUrl').value=fb.databaseURL||'';firebaseConfig=fb;}}catch(e){}
 try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
-try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<24){Object.assign(livePrices,lp.prices);if(lp.exDates)Object.assign(liveExDates,lp.exDates);if(lp.deletedKeys)lp.deletedKeys.forEach(function(k){deletedDivKeys.add(k);});if(lp.pendingDividends)pendingDividends=lp.pendingDividends;document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
+try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<24){Object.assign(livePrices,lp.prices);if(lp.exDates)Object.assign(liveExDates,lp.exDates);if(lp.deletedKeys)lp.deletedKeys.forEach(function(k){deletedDivKeys.add(k);});if(lp.pendingDividends){pendingDividends=lp.pendingDividends;pendingDividends.forEach(function(p){if(p.exDate)liveExDates[p.ticker]=p.exDate;});}document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
 function applyPaymentDate(ticker, exDate, payDate){
   // Update auto dividend entries for this ticker that are using ex-date instead of pay date
   if(!exDate||!payDate||exDate===payDate)return 0;

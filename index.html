@@ -1507,6 +1507,8 @@ function importCashCSV(event){
       var date=String(r[1]||'').trim();
       var currency=String(r[2]||'SGD').trim();
       var amount=Math.abs(parseFloat(r[3])||0);
+      // Normalize GBX (pence) to GBP on import
+      if(currency.toUpperCase()==='GBX'){currency='GBP';amount=parseFloat((amount/100).toFixed(4));}
       var details=String(r[4]||'').trim();
       var prefixedSymbol=String(r[5]||'').trim();
       var stockName=String(r[6]||'').trim();

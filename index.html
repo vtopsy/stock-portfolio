@@ -578,6 +578,7 @@ const PER=20;
 let curTxAction='Buy', curEditAction='Buy', curCashAction='DEPOSIT';
 const livePrices={};
 const liveExDates={};
+let deletedDivKeys=new Set();
 
 const FX={USD:1,SGD:1.35,HKD:7.82,GBP:0.79,GBX:79,EUR:0.92,JPY:151.2};
 const toUSD=(a,c)=>a/(FX[c]||1);
@@ -1259,13 +1260,19 @@ function delCashTx(idx){
   if(ct&&(ct.type||'').toUpperCase()==='DIVIDEND'){
     dividends=dividends.filter(function(d){
       // Match by _key if available, otherwise by ticker+date+approx amount
-      if(ct._key&&d._key===ct._key)return false;
+      if(ct._key&&d._key===ct._key){
+        if(d.auto)deletedDivKeys.add(d._key); // remember deleted auto entries
+        return false;
+      }
       if(!ct._key){
         const ctAmtUSD=toUSD(Math.abs(parseFloat(ct.amount)||0),ct.currency||baseCurrency);
         if(d.ticker===ct.symbol&&d.date===ct.date&&Math.abs(d.amount-ctAmtUSD)<0.5)return false;
       }
       return true;
     });
+    // Also block by ticker+exDate so refreshPrices won't re-add it
+    if(ct._key)deletedDivKeys.add(ct._key);
+    try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,deletedKeys:[...deletedDivKeys],ts:Date.now()}));}catch(e){}
   }
   renderCash();renderMetrics();updateDivChart();saveToFirebase();showToast('Deleted');
 }
@@ -1331,23 +1338,28 @@ async function refreshPrices(){
               if(totalOrig<=0)return;
               const totalUSD=toUSD(totalOrig,hCur);
               const divKey='DIV_'+ticker+'_'+evDate+'_'+totalUSD.toFixed(4);
+              // Skip if user previously deleted this auto entry
+              if(deletedDivKeys.has(divKey))return;
               // Skip if exact ticker+date already exists in dividends
               if(dividends.some(function(d){return d.ticker===ticker&&d.date===evDate;}))return;
               // Skip if exact ticker+date already exists in cash transactions
               if(cashTxList.some(function(ct){return (ct.type||'').toUpperCase()==='DIVIDEND'&&ct.symbol===ticker&&ct.date===evDate;}))return;
               // Skip if ANY cash dividend exists within 60 days for this ticker
-              // Cash CSV is the source of truth — Yahoo only fills gaps with no cash entry at all
+              // Also check against exDate field in case cash entry uses payment date
               const evTime=new Date(evDate).getTime();
               const hasCashNearby=cashTxList.some(function(ct){
                 if((ct.type||'').toUpperCase()!=='DIVIDEND'||ct.symbol!==ticker)return false;
-                const daysDiff=Math.abs(new Date(ct.date).getTime()-evTime)/(1000*60*60*24);
+                const dateToCheck=ct.exDate||ct.date;
+                const daysDiff=Math.abs(new Date(dateToCheck).getTime()-evTime)/(1000*60*60*24);
                 return daysDiff<=60;
               });
               if(hasCashNearby)return;
-              // Skip if ANY dividend entry exists within 60 days for this ticker (auto or imported)
+              // Skip if ANY dividend entry exists within 60 days for this ticker
+              // Check both date and exDate fields
               const hasDivNearby=dividends.some(function(d){
                 if(d.ticker!==ticker)return false;
-                const daysDiff=Math.abs(new Date(d.date).getTime()-evTime)/(1000*60*60*24);
+                const dateToCheck=d.exDate||d.date;
+                const daysDiff=Math.abs(new Date(dateToCheck).getTime()-evTime)/(1000*60*60*24);
                 return daysDiff<=60;
               });
               if(hasDivNearby)return;
@@ -1377,7 +1389,7 @@ async function refreshPrices(){
   if(divAdded>0){saveToFirebase();}
   document.getElementById('syncStatus').textContent=n?'Live ('+n+')':'Local';
   document.getElementById('yhStatus').textContent=(n?'Updated '+n+' prices':'No prices returned')+( divAdded?' · '+divAdded+' dividends added':'');
-  try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,ts:Date.now()}));}catch(e){}
+  try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,deletedKeys:[...deletedDivKeys],ts:Date.now()}));}catch(e){}
   renderAll();updateDivChart();showToast(n?n+' prices'+(divAdded?' + '+divAdded+' dividends':'')+' updated':'Prices unchanged');
 }
 
@@ -1710,7 +1722,7 @@ document.querySelectorAll('.modal-bg').forEach(function(m){m.addEventListener('c
 try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){document.getElementById('fbApiKey').value=fb.apiKey||'';document.getElementById('fbDbUrl').value=fb.databaseURL||'';firebaseConfig=fb;}}catch(e){}
 try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
-try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<24){Object.assign(livePrices,lp.prices);if(lp.exDates)Object.assign(liveExDates,lp.exDates);document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
+try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<24){Object.assign(livePrices,lp.prices);if(lp.exDates)Object.assign(liveExDates,lp.exDates);if(lp.deletedKeys)lp.deletedKeys.forEach(function(k){deletedDivKeys.add(k);});document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
 function applyPaymentDate(ticker, exDate, payDate){
   // Update auto dividend entries for this ticker that are using ex-date instead of pay date
   if(!exDate||!payDate||exDate===payDate)return 0;

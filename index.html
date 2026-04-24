@@ -1292,8 +1292,8 @@ async function refreshPrices(){
           const w=watchlist.find(function(x){return x.ticker===ticker;});
           if(w){w.price=price;w.chg=+(price-prev).toFixed(2);w.pct=prev>0?+((price-prev)/prev*100).toFixed(2):0;}
           // Extract Yahoo dividendDate (payment date) and exDividendDate if available
-          if(meta.dividendDate&&h){const payDate=new Date(meta.dividendDate*1000).toISOString().split("T")[0];h._yahooPayDate=payDate;}
           if(meta.exDividendDate&&h){liveExDates[ticker]=new Date(meta.exDividendDate*1000).toISOString().split("T")[0];}
+          if(meta.dividendDate&&meta.exDividendDate&&h){const exDate=new Date(meta.exDividendDate*1000).toISOString().split("T")[0];const payDate=new Date(meta.dividendDate*1000).toISOString().split("T")[0];if(parseInt(payDate.slice(0,4))>=new Date().getFullYear()-1){const cnt=applyPaymentDate(ticker,exDate,payDate);if(cnt>0)divAdded+=cnt;}}
 
           // ── Process dividend events ──
           const divEvents=result.events&&result.events.dividends;
@@ -1362,7 +1362,6 @@ async function refreshPrices(){
   document.getElementById('yhStatus').textContent=(n?'Updated '+n+' prices':'No prices returned')+( divAdded?' · '+divAdded+' dividends added':'');
   try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,ts:Date.now()}));}catch(e){}
   renderAll();updateDivChart();showToast(n?n+' prices'+(divAdded?' + '+divAdded+' dividends':'')+' updated':'Prices unchanged');
-  fetchPaymentDates();
 }
 
 
@@ -1695,53 +1694,28 @@ try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){docu
 try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
 try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<24){Object.assign(livePrices,lp.prices);if(lp.exDates)Object.assign(liveExDates,lp.exDates);document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
-async function fetchPaymentDates(){
-  // Use Yahoo quoteSummary calendarEvents to get exact payment dates
-  // This returns both exDividendDate and dividendDate (payment date)
-  const tickers=[...new Set(openH().map(function(h){return h.ticker;}))];
+function applyPaymentDate(ticker, exDate, payDate){
+  // Update auto dividend entries for this ticker that are using ex-date instead of pay date
+  if(!exDate||!payDate||exDate===payDate)return 0;
   let updated=0;
-  for(var i=0;i<tickers.length;i++){
-    const ticker=tickers[i];
-    try{
-      const url='https://query1.finance.yahoo.com/v10/finance/quoteSummary/'+encodeURIComponent(ticker)+'?modules=calendarEvents';
-      const proxy='https://corsproxy.io/?'+encodeURIComponent(url);
-      const res=await fetch(proxy);
-      if(!res.ok)continue;
-      const data=await res.json();
-      const cal=data&&data.quoteSummary&&data.quoteSummary.result&&data.quoteSummary.result[0]&&data.quoteSummary.result[0].calendarEvents;
-      if(!cal)continue;
-      const exTs=cal.exDividendDate&&cal.exDividendDate.raw;
-      const payTs=cal.dividendDate&&cal.dividendDate.raw;
-      if(exTs) liveExDates[ticker]=new Date(exTs*1000).toISOString().split('T')[0];
-      if(payTs){
-        const payDate=new Date(payTs*1000).toISOString().split('T')[0];
-        const exDate=liveExDates[ticker];
-        // Update any auto dividend entry that has the ex-date as its date
-        dividends.forEach(function(d){
-          if(d.ticker!==ticker||!d.auto)return;
-          if(d.date===exDate||d.exDate===exDate||(exDate&&!d.exDate&&!d.payDate)){
-            if(d.date!==payDate){
-              // Update matching cash entry
-              const ct=cashTxList.find(function(c){return c._key===d._key;});
-              if(ct&&ct.date===d.date){
-                ct.date=payDate;
-                ct.details=(ct.details||'').replace(/ \(ex-date:[^)]*\)/,'')+' (ex-date: '+d.date+')';
-              }
-              d.exDate=d.date;
-              d.date=payDate;
-              d.payDate=payDate;
-              updated++;
-            }
-          }
-        });
+  dividends.forEach(function(d){
+    if(d.ticker!==ticker||!d.auto)return;
+    // Match if entry date equals ex-date and pay date not yet set
+    if((d.date===exDate||(!d.exDate&&!d.payDate&&d.date===exDate))&&d.date!==payDate){
+      const ct=cashTxList.find(function(c){return c._key===d._key;});
+      if(ct&&ct.date===d.date){
+        ct.date=payDate;
+        ct.details=(ct.details||'').replace(/ \(ex-date:[^)]*\)/,'')+' (ex-date: '+exDate+')';
       }
-    }catch(e){console.error('fetchPaymentDates error',ticker,e);}
-    await new Promise(function(r){setTimeout(r,500);});
-  }
-  if(updated>0){saveToFirebase();renderAll();updateDivChart();showToast(updated+' dividend payment dates resolved');}
-  try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,ts:Date.now()}));}catch(e){}
-  renderAll(); // refresh XD badges with latest exDates
+      d.exDate=exDate;
+      d.date=payDate;
+      d.payDate=payDate;
+      updated++;
+    }
+  });
+  return updated;
 }
+function fetchPaymentDates(){} // no-op — payment dates now resolved inline during refreshPrices
 
 function deduplicateDividends(){
   // Step 1: Dedup cashTxList — keep by ticker+date+amount

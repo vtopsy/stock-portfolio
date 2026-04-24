@@ -1251,7 +1251,24 @@ function saveEditCashTx(){
   cashTxList[idx]=Object.assign({},cashTxList[idx],{type:document.getElementById('ecType').value,date:document.getElementById('ecDate').value,currency:document.getElementById('ecCurrency').value,amount:parseFloat(document.getElementById('ecAmount').value)||0,symbol:document.getElementById('ecSymbol').value,stockName:document.getElementById('ecStockName').value,portfolio:document.getElementById('ecPortfolio').value,details:document.getElementById('ecDetails').value});
   closeModal('editCashTxModal');renderCash();renderMetrics();saveToFirebase();showToast('Cash transaction updated');
 }
-function delCashTx(idx){if(!confirm('Delete this cash transaction?'))return;cashTxList.splice(idx,1);renderCash();renderMetrics();saveToFirebase();showToast('Deleted');}
+function delCashTx(idx){
+  if(!confirm('Delete this cash transaction?'))return;
+  const ct=cashTxList[idx];
+  cashTxList.splice(idx,1);
+  // Also remove matching dividend record if it exists
+  if(ct&&(ct.type||'').toUpperCase()==='DIVIDEND'){
+    dividends=dividends.filter(function(d){
+      // Match by _key if available, otherwise by ticker+date+approx amount
+      if(ct._key&&d._key===ct._key)return false;
+      if(!ct._key){
+        const ctAmtUSD=toUSD(Math.abs(parseFloat(ct.amount)||0),ct.currency||baseCurrency);
+        if(d.ticker===ct.symbol&&d.date===ct.date&&Math.abs(d.amount-ctAmtUSD)<0.5)return false;
+      }
+      return true;
+    });
+  }
+  renderCash();renderMetrics();updateDivChart();saveToFirebase();showToast('Deleted');
+}
 
 function addWatch(){const t=document.getElementById('wTicker').value.toUpperCase().trim();const n=document.getElementById('wName').value.trim();if(!t)return;watchlist.push({ticker:t,name:n||t,price:0,chg:0,pct:0});closeModal('addWatchModal');renderWatchlist();showToast(t+' added');}
 function addAlert(){const t=document.getElementById('alTicker').value.toUpperCase().trim();const cond=document.getElementById('alCond').value;const target=parseFloat(document.getElementById('alPrice').value);if(!t||!target)return;alerts.push({ticker:t,cond:cond,target:target,triggered:false});closeModal('alertModal');renderAlerts();showToast('Alert set');}

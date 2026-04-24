@@ -1255,6 +1255,8 @@ async function refreshPrices(){
           }
           const w=watchlist.find(function(x){return x.ticker===ticker;});
           if(w){w.price=price;w.chg=+(price-prev).toFixed(2);w.pct=prev>0?+((price-prev)/prev*100).toFixed(2):0;}
+          // Extract Yahoo dividendDate (payment date) if available
+          if(meta.dividendDate&&h){const payDate=new Date(meta.dividendDate*1000).toISOString().split("T")[0];h._yahooPayDate=payDate;}
 
           // ── Process dividend events ──
           const divEvents=result.events&&result.events.dividends;
@@ -1295,11 +1297,21 @@ async function refreshPrices(){
                 return daysDiff<=60;
               });
               if(hasDivNearby)return;
+              // Use Yahoo's dividendDate (payment date) if available and close to ex-date
+              var useDate=evDate;
+              if(h._yahooPayDate){
+                const exTime=new Date(evDate).getTime();
+                const payTime=new Date(h._yahooPayDate).getTime();
+                const daysDiff=(payTime-exTime)/(1000*60*60*24);
+                // Use pay date if it's within 90 days after ex-date (sanity check)
+                if(daysDiff>=0&&daysDiff<=90) useDate=h._yahooPayDate;
+              }
+              const exNote=useDate!==evDate?' (ex-date: '+evDate+')':'';
               // Add to dividends list
-              dividends.push({_key:divKey,ticker:ticker,name:hName,amount:totalUSD,date:evDate,type:'Dividend',auto:true});
+              dividends.push({_key:divKey,ticker:ticker,name:hName,amount:totalUSD,date:useDate,exDate:evDate,type:'Dividend',auto:true});
               // Add to cash transactions in original currency
               const cashAmt=parseFloat(totalOrig.toFixed(2));
-              cashTxList.push({_key:divKey,type:'DIVIDEND',date:evDate,currency:hCur,amount:cashAmt,details:'Dividend: '+amtPerShare.toFixed(4)+' per share × '+h.shares+' shares',symbol:ticker,stockName:hName,portfolio:h.exchange});
+              cashTxList.push({_key:divKey,type:'DIVIDEND',date:useDate,currency:hCur,amount:cashAmt,details:'Dividend: '+amtPerShare.toFixed(4)+' per share × '+h.shares+' shares'+exNote,symbol:ticker,stockName:hName,portfolio:h.exchange});
               divAdded++;
             });
           }
@@ -1313,101 +1325,9 @@ async function refreshPrices(){
   document.getElementById('yhStatus').textContent=(n?'Updated '+n+' prices':'No prices returned')+( divAdded?' · '+divAdded+' dividends added':'');
   try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,ts:Date.now()}));}catch(e){}
   renderAll();updateDivChart();showToast(n?n+' prices'+(divAdded?' + '+divAdded+' dividends':'')+' updated':'Prices unchanged');
-  // Fetch pay dates from stockanalysis.com for auto-added dividends missing a pay date
-  fetchPayDates();
 }
 
-function saUrl(ticker, exchange){
-  // Build stockanalysis.com dividend page URL based on exchange
-  const sym=ticker.replace('.SI','').replace('.L','').replace('.HK','');
-  if(exchange==='SGX') return 'https://stockanalysis.com/quote/sgx/'+sym+'/dividend/';
-  if(exchange==='LSE') return 'https://stockanalysis.com/quote/lse/'+sym+'/dividend/';
-  if(exchange==='HKEX'){
-    // HKEX tickers are like 1398.HK → need 4-digit zero-padded number
-    const num=sym.replace(/[^0-9]/g,'').padStart(4,'0');
-    return 'https://stockanalysis.com/quote/hkex/'+num+'/dividend/';
-  }
-  // US exchanges
-  return 'https://stockanalysis.com/stocks/'+ticker+'/dividend/';
-}
 
-async function fetchPayDates(){
-  // Find auto-added dividends that have no pay date yet
-  const autoNeedingPayDate=dividends.filter(function(d){return d.auto&&!d.payDate;});
-  if(!autoNeedingPayDate.length)return;
-
-  // Group by ticker to avoid fetching same page multiple times
-  const byTicker={};
-  autoNeedingPayDate.forEach(function(d){
-    if(!byTicker[d.ticker])byTicker[d.ticker]=[];
-    byTicker[d.ticker].push(d);
-  });
-
-  let updated=0;
-  for(const ticker of Object.keys(byTicker)){
-    const h=openH().find(function(x){return x.ticker===ticker;});
-    if(!h)continue;
-    try{
-      const url=saUrl(ticker, h.exchange);
-      // Try multiple CORS proxies in sequence
-      const proxies=[
-        'https://api.allorigins.win/raw?url='+encodeURIComponent(url),
-        'https://corsproxy.io/?'+encodeURIComponent(url),
-        'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(url),
-      ];
-      let html=null;
-      for(const proxy of proxies){
-        try{
-          const res=await fetch(proxy);
-          if(res.ok){html=await res.text();break;}
-        }catch(e){}
-      }
-      if(!html)continue;
-      // Parse dividend table rows: Ex-Date | Amount | Record Date | Pay Date
-      // Table rows look like: <td>Apr 8, 2026</td>...<td>Apr 17, 2026</td>
-      const rowMatches=[...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
-      rowMatches.forEach(function(rowMatch){
-        const cells=[...rowMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(function(m){
-          return m[1].replace(/<[^>]+>/g,'').trim();
-        });
-        if(cells.length<4)return;
-        // cells[0]=ExDate, cells[1]=Amount, cells[2]=RecordDate, cells[3]=PayDate
-        const exDateStr=cells[0];
-        const payDateStr=cells[3];
-        if(!exDateStr||!payDateStr)return;
-        // Parse date like "Apr 8, 2026" → "2026-04-08"
-        const parseDate=function(s){
-          const d=new Date(s);
-          if(isNaN(d))return null;
-          return d.toISOString().split('T')[0];
-        };
-        const exDate=parseDate(exDateStr);
-        const payDate=parseDate(payDateStr);
-        if(!exDate||!payDate)return;
-        // Find matching auto dividend by ex-date and update its date to pay date
-        byTicker[ticker].forEach(function(d){
-          if(d.date===exDate&&!d.payDate){
-            // Update dividend record: use pay date as the date, store ex-date
-            const oldKey=d._key;
-            d.payDate=payDate;
-            d.exDate=exDate;
-            d.date=payDate; // use pay date as primary date
-            // Update matching cash entry too
-            const ct=cashTxList.find(function(c){return c._key===oldKey;});
-            if(ct){ct.date=payDate;ct.details=ct.details+' (Pay date; ex-date: '+exDate+')';}
-            updated++;
-          }
-        });
-      });
-    }catch(e){console.error('fetchPayDates error for '+ticker,e);}
-    await new Promise(function(r){setTimeout(r,800);});
-  }
-  if(updated>0){
-    saveToFirebase();
-    renderAll();updateDivChart();
-    showToast(updated+' dividend pay dates updated');
-  }
-}
 
 // ===================== CSV =====================
 function buildTicker(rawSymbol, exchange){

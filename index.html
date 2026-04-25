@@ -174,23 +174,14 @@ input[type=file]{display:none}
       </div>
     </div>
   </div>
-  <div class="grid-2">
-    <div class="card">
-      <div class="card-header"><span class="card-title">Top Holdings</span></div>
-      <div id="topHoldingsBody"></div>
-    </div>
-    <div class="card">
-      <div class="card-header"><span class="card-title">Upcoming Dividends</span></div>
-      <div id="upcomingDivList" style="max-height:260px;overflow-y:auto"></div>
-    </div>
+  <div class="card">
+    <div id="dashCurrencyTable"></div>
   </div>
 </div>
 
 <!-- HOLDINGS -->
 <div id="holdings" class="page">
-  <div class="card" id="holdingsSummaryCard">
-    <div id="holdingsSummaryTable"></div>
-  </div>
+  <div id="holdingsSummaryTable" style="display:none"></div>
   <div class="card">
     <div class="summary-row" id="holdingSummaryRow"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
@@ -806,6 +797,14 @@ function renderHoldingsSummaryTable(){
   document.getElementById('holdingsSummaryTable').innerHTML='<table class="tbl"><thead><tr><th>Currency</th><th>Current Value</th><th>Current P&L (+Div)</th><th>Closed P&L (+Div)</th><th>Overall P&L (+Div)</th></tr></thead><tbody>'+rows+'<tr style="border-top:2px solid var(--border);font-weight:700"><td>Total in '+baseCurrency+'</td><td>'+baseCurrency+' '+grandMV.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td><td><span style="color:'+gc(grandOpenPnl)+';font-weight:700">'+gs(grandOpenPnl)+baseCurrency+' '+Math.abs(grandOpenPnl).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' ('+(grandOpenPnl>=0?'+':'')+grandOpenPct+'%)</span></td><td><span style="color:'+gc(grandClosedPnlBase)+';font-weight:700">'+gs(grandClosedPnlBase)+baseCurrency+' '+Math.abs(grandClosedPnlBase).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' ('+(grandClosedPnlBase>=0?'+':'')+grandClosedPct+'%)</span></td><td><span style="color:'+gc(grandOverall)+';font-weight:700">'+gs(grandOverall)+baseCurrency+' '+Math.abs(grandOverall).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' ('+(grandOverall>=0?'+':'')+grandOverallPct+'%)</span></td></tr></tbody></table>';
 }
 
+function renderDashCurrency(){
+  // Reuse the same currency breakdown table from holdings page
+  renderHoldingsSummaryTable();
+  const el=document.getElementById('dashCurrencyTable');
+  const src=document.getElementById('holdingsSummaryTable');
+  if(el&&src)el.innerHTML=src.innerHTML;
+}
+
 function renderTopHoldings(){
   const sorted=openH().sort(function(a,b){return b.mv-a.mv;}).slice(0,8);
   document.getElementById('topHoldingsBody').innerHTML=sorted.length
@@ -837,7 +836,7 @@ function renderUpcomingDivs(){
     items.push({ticker:h.ticker,name:h.name,exDate:exDate,dispAmt:dispAmt,isToday:isToday,isFuture:isFuture,exTime:exTime,payDate:payDate});
   });
   items.sort(function(a,b){return a.exTime-b.exTime;});
-  document.getElementById('upcomingDivList').innerHTML=items.length
+  const html=items.length
     ?items.map(function(d){
       const label=d.isToday?'<span style="background:var(--amber);color:#000;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:6px">XD TODAY</span>'
         :d.isFuture?'<span style="background:var(--bg3);color:var(--text3);font-size:9px;padding:1px 5px;border-radius:3px;margin-left:6px">UPCOMING</span>'
@@ -853,13 +852,14 @@ function renderUpcomingDivs(){
         +'</div></div>';
     }).join('')
     :'<div style="color:var(--text3);padding:8px 0">No upcoming dividends. Refresh prices to fetch.</div>';
+  const el=document.getElementById('upcomingDivList');
+  if(el)el.innerHTML=html;
   // Also populate the dividends tab version
   const el2=document.getElementById('upcomingDivList2');
-  if(el2)el2.innerHTML=document.getElementById('upcomingDivList').innerHTML;
+  if(el2)el2.innerHTML=html;
 }
 
 function renderHoldings(){
-  renderHoldingsSummaryTable();
   const search=(document.getElementById('searchHoldings')||{value:''}).value.toLowerCase();
   const all=holdingView==='open'?openH():buildHoldings().filter(function(h){return h.shares<=0.0001;}).map(calcH);
   const rows=all.filter(function(h){return h.ticker.toLowerCase().includes(search)||(h.name||'').toLowerCase().includes(search);}).sort(function(a,b){return b.mv-a.mv;});
@@ -1787,7 +1787,7 @@ function clearAllData(){if(!confirm('Clear ALL data?'))return;transactions=[];ca
 // ===================== RENDER ALL =====================
 function renderCash(){renderCashBalances();renderCashTx();}
 function renderAll(){
-  renderMetrics();renderTopHoldings();renderUpcomingDivs();
+  renderMetrics();renderDashCurrency();renderUpcomingDivs();
   renderTransactions();renderHoldings();renderCash();
   renderDivHistory();renderDivYearlyTable();renderDripSim();
   renderAnalyticsMetrics();renderRiskMetrics();renderGeoList();renderXirr();

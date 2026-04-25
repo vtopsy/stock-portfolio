@@ -578,6 +578,7 @@ const PER=20;
 let curTxAction='Buy', curEditAction='Buy', curCashAction='DEPOSIT';
 const livePrices={};
 const liveExDates={};
+const liveExInfo={};
 let deletedDivKeys=new Set(); // keys blocked from re-adding (ex-date entries user deleted)
 let pendingDividends=[]; // auto dividends waiting for payment date to arrive
 
@@ -821,33 +822,44 @@ function renderTopHoldings(){
 
 function renderUpcomingDivs(){
   const todayStr=today();
-  // Show entries marked upcoming:true OR where exDate is today or future
-  const up=dividends.filter(function(d){
-    if(d.upcoming)return true;
-    const checkDate=d.exDate||d.date;
-    return checkDate>=todayStr;
-  }).sort(function(a,b){
-    return new Date(a.exDate||a.date)-new Date(b.exDate||b.date);
-  }).slice(0,8);
-  document.getElementById('upcomingDivList').innerHTML=up.length
-    ?up.map(function(d){
-      const exDate=d.exDate||d.date;
-      const h=openH().find(function(x){return x.ticker===d.ticker;});
-      const origCur=(h&&h.currency)||baseCurrency;
-      const origAmt=(d.amount*(FX[origCur]||1));
-      const dispAmt=origCur+' '+origAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
-      const isToday=exDate===todayStr;
+  const todayTime=new Date(todayStr).getTime();
+  // Build upcoming list from liveExDates — show if ex-date is within last 3 days or future
+  const items=[];
+  openH().forEach(function(h){
+    const exDate=liveExDates[h.ticker];
+    if(!exDate)return;
+    const exTime=new Date(exDate).getTime();
+    const daysDiff=(exTime-todayTime)/(1000*60*60*24);
+    if(daysDiff<-3)return; // more than 3 days past — skip
+    // Get estimated amount from most recent dividend record for this ticker
+    const origCur=h.currency||baseCurrency;
+    const exInfo=liveExInfo[h.ticker];
+    const totalAmt=exInfo?(exInfo.amtPerShare*h.shares):null;
+    const dispAmt=totalAmt?(origCur+' '+totalAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})):'--';
+    const isToday=exDate===todayStr;
+    const isFuture=exDate>todayStr;
+    const pending=pendingDividends.find(function(p){return p.ticker===h.ticker&&p.exDate===exDate;});
+    const divRec=dividends.find(function(d){return d.ticker===h.ticker&&(d.exDate===exDate||d.date===exDate);});
+    const payDate=(pending&&pending.payDate)||(divRec&&divRec.payDate)||null;
+    items.push({ticker:h.ticker,name:h.name,exDate:exDate,dispAmt:dispAmt,isToday:isToday,isFuture:isFuture,exTime:exTime,payDate:payDate});
+  });
+  items.sort(function(a,b){return a.exTime-b.exTime;});
+  document.getElementById('upcomingDivList').innerHTML=items.length
+    ?items.map(function(d){
+      const label=d.isToday?'<span style="background:var(--amber);color:#000;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:6px">XD TODAY</span>'
+        :d.isFuture?'<span style="background:var(--bg3);color:var(--text3);font-size:9px;padding:1px 5px;border-radius:3px;margin-left:6px">UPCOMING</span>'
+        :'<span style="background:var(--bg3);color:var(--text3);font-size:9px;padding:1px 5px;border-radius:3px;margin-left:6px">XD</span>';
+      const payStr=d.payDate?('<div style="font-size:11px;color:var(--text3)">Pay: '+d.payDate+'</div>'):'<div style="font-size:11px;color:var(--text3)">Pay: --</div>';
       return '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">'
-        +'<div style="flex:1"><b>'+d.ticker+'</b>'
-        +'<span style="color:var(--text3);font-size:12px;margin-left:6px">'+(d.name||'')+'</span>'
-        +(isToday?'<span style="background:var(--amber);color:#000;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:6px">XD TODAY</span>':'')
-        +'</div>'
+        +'<div style="flex:1"><b>'+d.ticker+'</b>'+label
+        +'<span style="color:var(--text3);font-size:12px;margin-left:6px">'+d.name+'</span></div>'
         +'<div style="text-align:right">'
-        +'<div style="color:var(--green);font-weight:600">~'+dispAmt+'</div>'
-        +'<div style="font-size:11px;color:var(--text3)">Ex: '+exDate+'</div>'
+        +'<div style="color:var(--green);font-weight:600">~'+d.dispAmt+'</div>'
+        +'<div style="font-size:11px;color:var(--text3)">Ex: '+d.exDate+'</div>'
+        +payStr
         +'</div></div>';
     }).join('')
-    :'<div style="color:var(--text3);padding:8px 0">No upcoming dividends tracked. Refresh prices to fetch.</div>';
+    :'<div style="color:var(--text3);padding:8px 0">No upcoming dividends. Refresh prices to fetch.</div>';
 }
 
 function renderHoldings(){
@@ -1320,7 +1332,7 @@ function delCashTx(idx){
           exchange:((openH().find(function(h){return h.ticker===ct.symbol;})||{}).exchange||'')});
       }
     }
-    try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:Date.now()}));}catch(e){}
+    try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:Date.now()}));}catch(e){}
   }
   renderCash();renderMetrics();updateDivChart();saveToFirebase();showToast('Deleted');
 }
@@ -1369,8 +1381,14 @@ async function refreshPrices(){
           if(h){
             const evs=result.events&&result.events.dividends;
             if(evs){
-              const dates=Object.values(evs).map(function(ev){return new Date(ev.date*1000).toISOString().split('T')[0];}).sort();
-              if(dates.length){liveExDates[ticker]=dates[dates.length-1];}
+              const evList=Object.values(evs).map(function(ev){return {date:new Date(ev.date*1000).toISOString().split('T')[0],amount:ev.amount};}).sort(function(a,b){return a.date.localeCompare(b.date);});
+              if(evList.length){
+                const latest=evList[evList.length-1];
+                liveExDates[ticker]=latest.date;
+                var amtPerShare=parseFloat(latest.amount)||0;
+                if(isLSE) amtPerShare=amtPerShare/100;
+                liveExInfo[ticker]={exDate:latest.date,amtPerShare:amtPerShare,currency:hCur};
+              }
             }
             // Also check meta fields as fallback (works for US stocks)
             if(meta.exDividendDate){liveExDates[ticker]=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];}
@@ -1437,7 +1455,7 @@ async function refreshPrices(){
   if(divAdded>0){saveToFirebase();}
   document.getElementById('syncStatus').textContent=n?'Live ('+n+')':'Local';
   document.getElementById('yhStatus').textContent=(n?'Updated '+n+' prices':'No prices returned')+( divAdded?' · '+divAdded+' dividends added':'');
-  try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:Date.now()}));}catch(e){}
+  try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:Date.now()}));}catch(e){}
   // Re-render holdings now that liveExDates is populated (for XD badges)
   renderHoldings();
   // Check pendingDividends — add any whose payment date has arrived
@@ -1788,7 +1806,7 @@ document.querySelectorAll('.modal-bg').forEach(function(m){m.addEventListener('c
 try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){document.getElementById('fbApiKey').value=fb.apiKey||'';document.getElementById('fbDbUrl').value=fb.databaseURL||'';firebaseConfig=fb;}}catch(e){}
 try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
-try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<24){Object.assign(livePrices,lp.prices);if(lp.exDates)Object.assign(liveExDates,lp.exDates);if(lp.deletedKeys)lp.deletedKeys.forEach(function(k){deletedDivKeys.add(k);});if(lp.pendingDividends){pendingDividends=lp.pendingDividends;pendingDividends.forEach(function(p){if(p.exDate)liveExDates[p.ticker]=p.exDate;});}document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
+try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<24){Object.assign(livePrices,lp.prices);if(lp.exDates)Object.assign(liveExDates,lp.exDates);if(lp.exInfo)Object.assign(liveExInfo,lp.exInfo);if(lp.deletedKeys)lp.deletedKeys.forEach(function(k){deletedDivKeys.add(k);});if(lp.pendingDividends){pendingDividends=lp.pendingDividends;pendingDividends.forEach(function(p){if(p.exDate)liveExDates[p.ticker]=p.exDate;});}document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
 function applyPaymentDate(ticker, exDate, payDate){
   // Update auto dividend entries for this ticker that are using ex-date instead of pay date
   if(!exDate||!payDate||exDate===payDate)return 0;

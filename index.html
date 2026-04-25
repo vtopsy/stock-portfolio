@@ -820,11 +820,34 @@ function renderTopHoldings(){
 }
 
 function renderUpcomingDivs(){
-  const td=new Date();
-  const up=dividends.filter(function(d){return new Date(d.date)>=td;}).sort(function(a,b){return new Date(a.date)-new Date(b.date);}).slice(0,5);
+  const todayStr=today();
+  // Show entries marked upcoming:true OR where exDate is today or future
+  const up=dividends.filter(function(d){
+    if(d.upcoming)return true;
+    const checkDate=d.exDate||d.date;
+    return checkDate>=todayStr;
+  }).sort(function(a,b){
+    return new Date(a.exDate||a.date)-new Date(b.exDate||b.date);
+  }).slice(0,8);
   document.getElementById('upcomingDivList').innerHTML=up.length
-    ?up.map(function(d){return '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)"><div style="flex:1"><b>'+d.ticker+'</b><span style="color:var(--text3);font-size:12px;margin-left:6px">'+(d.name||'')+'</span></div><div style="text-align:right"><div style="color:var(--green);font-weight:600">+'+fmt(d.amount)+'</div><div style="font-size:11px;color:var(--text3)">'+d.date+'</div></div></div>';}).join('')
-    :'<div style="color:var(--text3);padding:8px 0">No upcoming dividends tracked.</div>';
+    ?up.map(function(d){
+      const exDate=d.exDate||d.date;
+      const h=openH().find(function(x){return x.ticker===d.ticker;});
+      const origCur=(h&&h.currency)||baseCurrency;
+      const origAmt=(d.amount*(FX[origCur]||1));
+      const dispAmt=origCur+' '+origAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+      const isToday=exDate===todayStr;
+      return '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">'
+        +'<div style="flex:1"><b>'+d.ticker+'</b>'
+        +'<span style="color:var(--text3);font-size:12px;margin-left:6px">'+(d.name||'')+'</span>'
+        +(isToday?'<span style="background:var(--amber);color:#000;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:6px">XD TODAY</span>':'')
+        +'</div>'
+        +'<div style="text-align:right">'
+        +'<div style="color:var(--green);font-weight:600">~'+dispAmt+'</div>'
+        +'<div style="font-size:11px;color:var(--text3)">Ex: '+exDate+'</div>'
+        +'</div></div>';
+    }).join('')
+    :'<div style="color:var(--text3);padding:8px 0">No upcoming dividends tracked. Refresh prices to fetch.</div>';
 }
 
 function renderHoldings(){

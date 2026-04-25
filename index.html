@@ -181,7 +181,7 @@ input[type=file]{display:none}
     </div>
     <div class="card">
       <div class="card-header"><span class="card-title">Upcoming Dividends</span></div>
-      <div id="upcomingDivList"></div>
+      <div id="upcomingDivList" style="max-height:260px;overflow-y:auto"></div>
     </div>
   </div>
 </div>
@@ -294,15 +294,8 @@ input[type=file]{display:none}
   </div>
   <div class="grid-2">
     <div class="card" style="margin-bottom:0">
-      <div class="card-header"><span class="card-title" id="calTitle">Dividend Calendar</span></div>
-      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px">
-        <div style="text-align:center;font-size:var(--fs-xs);color:var(--text3)">Sun</div><div style="text-align:center;font-size:var(--fs-xs);color:var(--text3)">Mon</div><div style="text-align:center;font-size:var(--fs-xs);color:var(--text3)">Tue</div><div style="text-align:center;font-size:var(--fs-xs);color:var(--text3)">Wed</div><div style="text-align:center;font-size:var(--fs-xs);color:var(--text3)">Thu</div><div style="text-align:center;font-size:var(--fs-xs);color:var(--text3)">Fri</div><div style="text-align:center;font-size:var(--fs-xs);color:var(--text3)">Sat</div>
-      </div>
-      <div class="cal-grid" id="calGrid"></div>
-      <div style="display:flex;gap:12px;margin-top:9px;font-size:var(--fs-sm);color:var(--text3)">
-        <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:4px;vertical-align:middle"></span>Past</span>
-        <span><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-right:4px;vertical-align:middle"></span>Upcoming</span>
-      </div>
+      <div class="card-header"><span class="card-title">Upcoming Dividends</span></div>
+      <div id="upcomingDivList2" style="max-height:300px;overflow-y:auto"></div>
     </div>
     <div class="card" style="margin-bottom:0">
       <div class="card-header">
@@ -854,12 +847,15 @@ function renderUpcomingDivs(){
         +'<div style="flex:1"><b>'+d.ticker+'</b>'+label
         +'<span style="color:var(--text3);font-size:12px;margin-left:6px">'+d.name+'</span></div>'
         +'<div style="text-align:right">'
-        +'<div style="color:var(--green);font-weight:600">~'+d.dispAmt+'</div>'
+        +'<div style="color:var(--green);font-weight:600">'+d.dispAmt+'</div>'
         +'<div style="font-size:11px;color:var(--text3)">Ex: '+d.exDate+'</div>'
         +payStr
         +'</div></div>';
     }).join('')
     :'<div style="color:var(--text3);padding:8px 0">No upcoming dividends. Refresh prices to fetch.</div>';
+  // Also populate the dividends tab version
+  const el2=document.getElementById('upcomingDivList2');
+  if(el2)el2.innerHTML=document.getElementById('upcomingDivList').innerHTML;
 }
 
 function renderHoldings(){
@@ -1793,7 +1789,7 @@ function renderCash(){renderCashBalances();renderCashTx();}
 function renderAll(){
   renderMetrics();renderTopHoldings();renderUpcomingDivs();
   renderTransactions();renderHoldings();renderCash();
-  renderDivHistory();renderDivYearlyTable();renderCalendar();renderDripSim();
+  renderDivHistory();renderDivYearlyTable();renderDripSim();
   renderAnalyticsMetrics();renderRiskMetrics();renderGeoList();renderXirr();
   renderWatchlist();renderAlerts();
   updateAllocChart();updatePLChart();updateSectorChart();

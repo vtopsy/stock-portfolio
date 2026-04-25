@@ -1387,7 +1387,8 @@ async function refreshPrices(){
                 liveExDates[ticker]=latest.date;
                 var amtPerShare=parseFloat(latest.amount)||0;
                 if(isLSE) amtPerShare=amtPerShare/100;
-                liveExInfo[ticker]={exDate:latest.date,amtPerShare:amtPerShare,currency:hCur};
+                const infoCur=isLSE?'GBP':(h.currency||'USD');
+                liveExInfo[ticker]={exDate:latest.date,amtPerShare:amtPerShare,currency:infoCur};
               }
             }
             // Also check meta fields as fallback (works for US stocks)

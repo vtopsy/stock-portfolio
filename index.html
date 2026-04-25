@@ -834,7 +834,7 @@ function renderUpcomingDivs(){
     // Get estimated amount from most recent dividend record for this ticker
     const origCur=h.currency||baseCurrency;
     const exInfo=liveExInfo[h.ticker];
-    const totalAmt=exInfo?(exInfo.amtPerShare*h.shares):null;
+    const totalAmt=exInfo?(exInfo.amtPerShare*(exInfo.shares||h.shares)):null;
     const dispAmt=totalAmt?(origCur+' '+totalAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})):'--';
     const isToday=exDate===todayStr;
     const isFuture=exDate>todayStr;
@@ -1375,26 +1375,23 @@ async function refreshPrices(){
           }
           const w=watchlist.find(function(x){return x.ticker===ticker;});
           if(w){w.price=price;w.chg=+(price-prev).toFixed(2);w.pct=prev>0?+((price-prev)/prev*100).toFixed(2):0;}
-          // Extract Yahoo dividendDate (payment date) and exDividendDate if available
-          // meta.exDividendDate not available for all exchanges — extract from events instead
-          // Most recent dividend event date = latest ex-date
-          if(h){
-            const evs=result.events&&result.events.dividends;
-            if(evs){
-              const evList=Object.values(evs).map(function(ev){return {date:new Date(ev.date*1000).toISOString().split('T')[0],amount:ev.amount};}).sort(function(a,b){return a.date.localeCompare(b.date);});
-              if(evList.length){
-                const latest=evList[evList.length-1];
-                liveExDates[ticker]=latest.date;
-                var amtPerShare=parseFloat(latest.amount)||0;
-                if(isLSE) amtPerShare=amtPerShare/100;
-                const infoCur=isLSE?'GBP':(h.currency||'USD');
-                liveExInfo[ticker]={exDate:latest.date,amtPerShare:amtPerShare,currency:infoCur};
-              }
+          // Extract ex-date and dividend amount from events — runs regardless of holdings
+          const evs=result.events&&result.events.dividends;
+          if(evs){
+            const evList=Object.values(evs).map(function(ev){return {date:new Date(ev.date*1000).toISOString().split('T')[0],amount:ev.amount};}).sort(function(a,b){return a.date.localeCompare(b.date);});
+            if(evList.length){
+              const latest=evList[evList.length-1];
+              liveExDates[ticker]=latest.date;
+              var amtPerShare=parseFloat(latest.amount)||0;
+              if(isLSE) amtPerShare=amtPerShare/100;
+              const infoCur=isLSE?'GBP':(h?h.currency:'USD');
+              const totalShares=h?h.shares:0;
+              liveExInfo[ticker]={exDate:latest.date,amtPerShare:amtPerShare,currency:infoCur,shares:totalShares};
             }
-            // Also check meta fields as fallback (works for US stocks)
-            if(meta.exDividendDate){liveExDates[ticker]=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];}
-            if(meta.dividendDate&&meta.exDividendDate){const exDate=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];const payDate=new Date(meta.dividendDate*1000).toISOString().split('T')[0];if(parseInt(payDate.slice(0,4))>=new Date().getFullYear()-1){const cnt=applyPaymentDate(ticker,exDate,payDate);if(cnt>0)divAdded+=cnt;}}
           }
+          // Also check meta fields as fallback (works for US stocks)
+          if(meta.exDividendDate){liveExDates[ticker]=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];}
+          if(h&&meta.dividendDate&&meta.exDividendDate){const exDate=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];const payDate=new Date(meta.dividendDate*1000).toISOString().split('T')[0];if(parseInt(payDate.slice(0,4))>=new Date().getFullYear()-1){const cnt=applyPaymentDate(ticker,exDate,payDate);if(cnt>0)divAdded+=cnt;}}
 
           // ── Process dividend events ──
           const divEvents=result.events&&result.events.dividends;

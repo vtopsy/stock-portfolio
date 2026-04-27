@@ -516,7 +516,7 @@ input[type=file]{display:none}
     <input type="hidden" id="editCashIdx"/>
     <div class="fr">
       <div class="fg"><label>Type</label>
-        <select id="ecType"><option>DEPOSIT</option><option>WITHDRAWAL</option><option>EXCHANGE</option><option>DIVIDEND</option><option>BUY</option><option>SELL</option></select>
+        <select id="ecType" onchange="document.getElementById('ecPayDateRow').style.display=this.value==='DIVIDEND'?'block':'none'"><option>DEPOSIT</option><option>WITHDRAWAL</option><option>EXCHANGE</option><option>DIVIDEND</option><option>BUY</option><option>SELL</option></select>
       </div>
       <div class="fg"><label>Date</label><input id="ecDate" type="date"/></div>
     </div>
@@ -530,6 +530,7 @@ input[type=file]{display:none}
     </div>
     <div class="fg"><label>Portfolio</label><select id="ecPortfolio"><option>SGX</option><option>NYSE</option><option>NASDAQ</option><option>HKEX</option><option>LSE</option><option>USX</option><option>Other</option></select></div>
     <div class="fg"><label>Details / Notes</label><input id="ecDetails"/></div>
+    <div class="fg" id="ecPayDateRow" style="display:none"><label>Payment Date</label><input id="ecPayDate" type="date"/></div>
     <div style="display:flex;gap:8px;margin-top:5px">
       <button class="btn btn-primary" onclick="saveEditCashTx()" style="flex:1">Save</button>
       <button class="btn btn-ghost" onclick="closeModal('editCashTxModal')">Cancel</button>
@@ -1294,12 +1295,38 @@ function editCashTxOpen(idx){
   document.getElementById('ecStockName').value=ct.stockName||'';
   document.getElementById('ecPortfolio').value=ct.portfolio||'SGX';
   document.getElementById('ecDetails').value=ct.details||ct.notes||'';
+  const isDiv=(ct.type||'').toUpperCase()==='DIVIDEND';
+  document.getElementById('ecPayDateRow').style.display=isDiv?'block':'none';
+  document.getElementById('ecPayDate').value=ct.payDate||'';
   openModal('editCashTxModal');
 }
 function saveEditCashTx(){
   const idx=parseInt(document.getElementById('editCashIdx').value);if(isNaN(idx))return;
-  cashTxList[idx]=Object.assign({},cashTxList[idx],{type:document.getElementById('ecType').value,date:document.getElementById('ecDate').value,currency:document.getElementById('ecCurrency').value,amount:parseFloat(document.getElementById('ecAmount').value)||0,symbol:document.getElementById('ecSymbol').value,stockName:document.getElementById('ecStockName').value,portfolio:document.getElementById('ecPortfolio').value,details:document.getElementById('ecDetails').value});
-  closeModal('editCashTxModal');renderCash();renderMetrics();saveToFirebase();showToast('Cash transaction updated');
+  const ecType=document.getElementById('ecType').value;
+  const ecPayDate=document.getElementById('ecPayDate').value||'';
+  const ecExDate=document.getElementById('ecDate').value;
+  // For DIVIDEND: use payment date as the cash transaction date if provided
+  const useDate=ecType==='DIVIDEND'&&ecPayDate?ecPayDate:ecExDate;
+  cashTxList[idx]=Object.assign({},cashTxList[idx],{type:ecType,date:useDate,currency:document.getElementById('ecCurrency').value,amount:parseFloat(document.getElementById('ecAmount').value)||0,symbol:document.getElementById('ecSymbol').value,stockName:document.getElementById('ecStockName').value,portfolio:document.getElementById('ecPortfolio').value,details:document.getElementById('ecDetails').value,payDate:ecPayDate||undefined,exDate:ecType==='DIVIDEND'&&ecPayDate?ecExDate:undefined});
+  // Update matching dividends record with pay date
+  if(ecType==='DIVIDEND'&&ecPayDate){
+    const ticker=document.getElementById('ecSymbol').value;
+    const key=cashTxList[idx]._key;
+    dividends.forEach(function(d,i){
+      if((key&&d._key===key)||(d.ticker===ticker&&(d.date===ecExDate||d.exDate===ecExDate))){
+        dividends[i].date=ecPayDate;
+        dividends[i].payDate=ecPayDate;
+        dividends[i].exDate=dividends[i].exDate||ecExDate;
+      }
+    });
+    // Also store in pendingDividends for upcoming div display
+    const existing=pendingDividends.findIndex(function(p){return p.ticker===ticker;});
+    const entry={ticker:ticker,exDate:ecExDate,payDate:ecPayDate,name:document.getElementById('ecStockName').value};
+    if(existing>=0)pendingDividends[existing]=Object.assign(pendingDividends[existing],entry);
+    else pendingDividends.push(entry);
+    try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:Date.now()}));}catch(e){}
+  }
+  closeModal('editCashTxModal');renderCash();renderMetrics();renderUpcomingDivs();saveToFirebase();showToast('Cash transaction updated');
 }
 function delCashTx(idx){
   if(!confirm('Delete this cash transaction?'))return;

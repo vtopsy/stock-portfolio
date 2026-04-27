@@ -822,13 +822,14 @@ function renderUpcomingDivs(){
     if(!exDate)return;
     const exTime=new Date(exDate).getTime();
     const daysDiff=(exTime-todayTime)/(1000*60*60*24);
-    // Also check if there's a pending payment date in the future
-    const pendingEntry=pendingDividends.find(function(p){return p.ticker===h.ticker&&p.exDate===exDate;});
-    const payDate=(pendingEntry&&pendingEntry.payDate)||null;
-    const payIsFuture=payDate&&payDate>=todayStr;
-    // Show if: ex-date is within last 30 days AND payment date hasn't passed yet (or unknown)
-    if(daysDiff<-30)return;
-    if(daysDiff<0&&!payIsFuture&&payDate)return; // payment already passed
+    if(daysDiff<-60)return; // too old
+    // Find payment date from pendingDividends, dividends array, or cashTxList
+    const pendingEntry=pendingDividends.find(function(p){return p.ticker===h.ticker;});
+    const divRec=dividends.find(function(d){return d.ticker===h.ticker&&(d.exDate===exDate||(!d.exDate&&Math.abs(new Date(d.date).getTime()-exTime)<60*86400000));});
+    const cashRec=cashTxList.find(function(ct){return ct.symbol===h.ticker&&(ct.type||'').toUpperCase()==='DIVIDEND'&&Math.abs(new Date(ct.date).getTime()-exTime)<60*86400000;});
+    const resolvedPayDate=(pendingEntry&&pendingEntry.payDate)||(divRec&&(divRec.payDate||divRec.date))||(cashRec&&cashRec.date)||null;
+    // Only show if payment date is today or in the future (or unknown)
+    if(resolvedPayDate&&resolvedPayDate<todayStr)return; // payment already passed — hide
     // Get estimated amount from most recent dividend record for this ticker
     const origCur=h.currency||baseCurrency;
     const exInfo=liveExInfo[h.ticker];
@@ -836,8 +837,7 @@ function renderUpcomingDivs(){
     const dispAmt=totalAmt?(origCur+' '+totalAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})):'--';
     const isToday=exDate===todayStr;
     const isFuture=exDate>todayStr;
-    const divRec=dividends.find(function(d){return d.ticker===h.ticker&&(d.exDate===exDate||d.date===exDate);});
-    const resolvedPayDate=(pendingEntry&&pendingEntry.payDate)||(divRec&&divRec.payDate)||payDate||null;
+    // resolvedPayDate already computed above
     items.push({ticker:h.ticker,name:h.name,exDate:exDate,dispAmt:dispAmt,isToday:isToday,isFuture:isFuture,exTime:exTime,payDate:resolvedPayDate});
   });
   items.sort(function(a,b){return a.exTime-b.exTime;});

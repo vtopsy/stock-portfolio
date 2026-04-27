@@ -822,7 +822,13 @@ function renderUpcomingDivs(){
     if(!exDate)return;
     const exTime=new Date(exDate).getTime();
     const daysDiff=(exTime-todayTime)/(1000*60*60*24);
-    if(daysDiff<-3)return; // more than 3 days past — skip
+    // Also check if there's a pending payment date in the future
+    const pendingEntry=pendingDividends.find(function(p){return p.ticker===h.ticker&&p.exDate===exDate;});
+    const payDate=(pendingEntry&&pendingEntry.payDate)||null;
+    const payIsFuture=payDate&&payDate>=todayStr;
+    // Show if: ex-date is within last 30 days AND payment date hasn't passed yet (or unknown)
+    if(daysDiff<-30)return;
+    if(daysDiff<0&&!payIsFuture&&payDate)return; // payment already passed
     // Get estimated amount from most recent dividend record for this ticker
     const origCur=h.currency||baseCurrency;
     const exInfo=liveExInfo[h.ticker];
@@ -830,10 +836,9 @@ function renderUpcomingDivs(){
     const dispAmt=totalAmt?(origCur+' '+totalAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})):'--';
     const isToday=exDate===todayStr;
     const isFuture=exDate>todayStr;
-    const pending=pendingDividends.find(function(p){return p.ticker===h.ticker&&p.exDate===exDate;});
     const divRec=dividends.find(function(d){return d.ticker===h.ticker&&(d.exDate===exDate||d.date===exDate);});
-    const payDate=(pending&&pending.payDate)||(divRec&&divRec.payDate)||null;
-    items.push({ticker:h.ticker,name:h.name,exDate:exDate,dispAmt:dispAmt,isToday:isToday,isFuture:isFuture,exTime:exTime,payDate:payDate});
+    const resolvedPayDate=(pendingEntry&&pendingEntry.payDate)||(divRec&&divRec.payDate)||payDate||null;
+    items.push({ticker:h.ticker,name:h.name,exDate:exDate,dispAmt:dispAmt,isToday:isToday,isFuture:isFuture,exTime:exTime,payDate:resolvedPayDate});
   });
   items.sort(function(a,b){return a.exTime-b.exTime;});
   const html=items.length
@@ -1753,6 +1758,20 @@ async function loadFromFirebase(){
       deduplicateDividends();
       saveToFirebase();
       renderAll();updateDivChart();
+      // Re-apply cached liveExDates/pendingDividends after Firebase overwrites data
+      try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');
+        if(lp.exDates)Object.assign(liveExDates,lp.exDates);
+        if(lp.exInfo)Object.assign(liveExInfo,lp.exInfo);
+        if(lp.deletedKeys)lp.deletedKeys.forEach(function(k){deletedDivKeys.add(k);});
+        if(lp.pendingDividends&&lp.pendingDividends.length){
+          lp.pendingDividends.forEach(function(p){
+            if(!pendingDividends.some(function(x){return x.ticker===p.ticker&&x.exDate===p.exDate;}))
+              pendingDividends.push(p);
+            if(p.exDate)liveExDates[p.ticker]=p.exDate;
+          });
+        }
+      }catch(e){}
+      renderHoldings();renderUpcomingDivs();
       document.getElementById('syncStatus').textContent='Loaded';
       document.getElementById('fbStatus').textContent='Loaded successfully';
       showToast('Loaded from Firebase');
@@ -1800,7 +1819,7 @@ document.querySelectorAll('.modal-bg').forEach(function(m){m.addEventListener('c
 try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){document.getElementById('fbApiKey').value=fb.apiKey||'';document.getElementById('fbDbUrl').value=fb.databaseURL||'';firebaseConfig=fb;}}catch(e){}
 try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
-try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<24){Object.assign(livePrices,lp.prices);if(lp.exDates)Object.assign(liveExDates,lp.exDates);if(lp.exInfo)Object.assign(liveExInfo,lp.exInfo);if(lp.deletedKeys)lp.deletedKeys.forEach(function(k){deletedDivKeys.add(k);});if(lp.pendingDividends){pendingDividends=lp.pendingDividends;pendingDividends.forEach(function(p){if(p.exDate)liveExDates[p.ticker]=p.exDate;});}document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
+try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<72){Object.assign(livePrices,lp.prices);if(lp.exDates)Object.assign(liveExDates,lp.exDates);if(lp.exInfo)Object.assign(liveExInfo,lp.exInfo);if(lp.deletedKeys)lp.deletedKeys.forEach(function(k){deletedDivKeys.add(k);});if(lp.pendingDividends){pendingDividends=lp.pendingDividends;pendingDividends.forEach(function(p){if(p.exDate)liveExDates[p.ticker]=p.exDate;});}document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
 function applyPaymentDate(ticker, exDate, payDate){
   // Update auto dividend entries for this ticker that are using ex-date instead of pay date
   if(!exDate||!payDate||exDate===payDate)return 0;

@@ -350,7 +350,15 @@ input[type=file]{display:none}
       <div class="setup-box">
         <h4>Yahoo Finance (via corsproxy.io)</h4>
         <p>Prices fetched via corsproxy.io — works on GitHub Pages with no API key needed.</p>
-        <div style="display:flex;gap:7px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="refreshPrices()">↻ Refresh Prices &amp; Dividends</button></div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-primary btn-sm" onclick="refreshPrices()">↻ Refresh Prices &amp; Dividends</button>
+          <label style="font-size:var(--fs-sm);color:var(--text2);display:flex;align-items:center;gap:6px">
+            Auto-refresh every
+            <input id="autoRefreshHours" type="number" min="0" max="24" step="0.5" value="0" oninput="saveAutoRefresh()" style="width:55px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--rsm);padding:4px 7px;font-size:var(--fs-sm)"/>
+            hours <span style="color:var(--text3)">(0 = off)</span>
+          </label>
+          <span id="nextRefreshLabel" style="font-size:var(--fs-xs);color:var(--text3)"></span>
+        </div>
         <div id="yhStatus" style="font-size:var(--fs-xs);margin-top:6px;color:var(--text3)"></div>
       </div>
       <div class="setup-box">
@@ -1308,17 +1316,25 @@ function saveEditCashTx(){
   // For DIVIDEND: use payment date as the cash transaction date if provided
   const useDate=ecType==='DIVIDEND'&&ecPayDate?ecPayDate:ecExDate;
   cashTxList[idx]=Object.assign({},cashTxList[idx],{type:ecType,date:useDate,currency:document.getElementById('ecCurrency').value,amount:parseFloat(document.getElementById('ecAmount').value)||0,symbol:document.getElementById('ecSymbol').value,stockName:document.getElementById('ecStockName').value,portfolio:document.getElementById('ecPortfolio').value,details:document.getElementById('ecDetails').value,payDate:ecPayDate||undefined,exDate:ecType==='DIVIDEND'&&ecPayDate?ecExDate:undefined});
-  // Update matching dividends record with pay date
+  // Update or create matching dividends record with pay date
   if(ecType==='DIVIDEND'&&ecPayDate){
     const ticker=document.getElementById('ecSymbol').value;
     const key=cashTxList[idx]._key;
+    let matched=false;
     dividends.forEach(function(d,i){
-      if((key&&d._key===key)||(d.ticker===ticker&&(d.date===ecExDate||d.exDate===ecExDate))){
+      if((key&&d._key===key)||(d.ticker===ticker&&(d.date===ecExDate||d.date===ecPayDate||d.exDate===ecExDate))){
         dividends[i].date=ecPayDate;
         dividends[i].payDate=ecPayDate;
         dividends[i].exDate=dividends[i].exDate||ecExDate;
+        matched=true;
       }
     });
+    // If no matching record found, create one from the cash entry
+    if(!matched){
+      const ct=cashTxList[idx];
+      const amtUSD=toUSD(Math.abs(parseFloat(ct.amount)||0),ct.currency||baseCurrency);
+      dividends.push({_key:key||('DIV_'+ticker+'_'+ecPayDate+'_'+amtUSD.toFixed(4)),ticker:ticker,name:ct.stockName||ticker,amount:amtUSD,date:ecPayDate,exDate:ecExDate,payDate:ecPayDate,type:'Dividend'});
+    }
     // Also store in pendingDividends for upcoming div display
     const existing=pendingDividends.findIndex(function(p){return p.ticker===ticker;});
     const entry={ticker:ticker,exDate:ecExDate,payDate:ecPayDate,name:document.getElementById('ecStockName').value};
@@ -1484,6 +1500,8 @@ async function refreshPrices(){
   try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:Date.now()}));}catch(e){}
   // Re-render holdings now that liveExDates is populated (for XD badges)
   renderHoldings();
+  // Fetch accurate ex-date and payment dates from dividends.sg for SGX stocks
+  fetchSGXDividendDates();
   // Check pendingDividends — add any whose payment date has arrived
   const todayNow=today();
   pendingDividends=pendingDividends.filter(function(p){
@@ -1847,6 +1865,68 @@ try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){docu
 try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
 try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<72){Object.assign(livePrices,lp.prices);if(lp.exDates)Object.assign(liveExDates,lp.exDates);if(lp.exInfo)Object.assign(liveExInfo,lp.exInfo);if(lp.deletedKeys)lp.deletedKeys.forEach(function(k){deletedDivKeys.add(k);});if(lp.pendingDividends){pendingDividends=lp.pendingDividends;pendingDividends.forEach(function(p){if(p.exDate)liveExDates[p.ticker]=p.exDate;});}document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
+async function fetchSGXDividendDates(){
+  // Fetch ex-date and payment date from dividends.sg for all SGX open holdings
+  const sgxHoldings=openH().filter(function(h){return h.exchange==='SGX';});
+  if(!sgxHoldings.length)return;
+  let updated=0;
+  for(var i=0;i<sgxHoldings.length;i++){
+    const h=sgxHoldings[i];
+    const sym=h.ticker.replace('.SI','').replace('.si','');
+    const url='https://www.dividends.sg/view/'+sym;
+    const proxy='https://corsproxy.io/?'+encodeURIComponent(url);
+    try{
+      const res=await fetch(proxy);
+      if(!res.ok)continue;
+      const html=await res.text();
+      // Parse table rows — dividends.sg table columns: Ex-Date | Amount | Type | Pay Date | Yield
+      // Rows look like: <tr><td>27 Apr 2026</td><td>...</td><td>...</td><td>08 May 2026</td>...
+      const parser=new DOMParser();
+      const doc=parser.parseFromString(html,'text/html');
+      const rows=doc.querySelectorAll('table tbody tr');
+      rows.forEach(function(row){
+        const cells=row.querySelectorAll('td');
+        if(cells.length<4)return;
+        const exDateStr=cells[0]&&cells[0].textContent.trim();
+        const payDateStr=cells[3]&&cells[3].textContent.trim();
+        if(!exDateStr||!payDateStr)return;
+        const parseDate=function(s){
+          const d=new Date(s);
+          return isNaN(d)?null:d.toISOString().split('T')[0];
+        };
+        const exDate=parseDate(exDateStr);
+        const payDate=parseDate(payDateStr);
+        if(!exDate||!payDate||exDate===payDate)return;
+        // Update liveExDates
+        if(!liveExDates[h.ticker]||exDate>liveExDates[h.ticker]){
+          liveExDates[h.ticker]=exDate;
+        }
+        // Store in pendingDividends if ex-date is recent (within 60 days) and pay date is future/recent
+        const todayStr=today();
+        const exTime=new Date(exDate).getTime();
+        const todayTime=new Date(todayStr).getTime();
+        const daysDiff=(todayTime-exTime)/(1000*60*60*24);
+        if(daysDiff>=0&&daysDiff<=60){
+          const existing=pendingDividends.findIndex(function(p){return p.ticker===h.ticker&&p.exDate===exDate;});
+          const entry={ticker:h.ticker,exDate:exDate,payDate:payDate,name:h.name,source:'dividends.sg'};
+          if(existing>=0)pendingDividends[existing]=Object.assign(pendingDividends[existing],entry);
+          else pendingDividends.push(entry);
+          // Update matching auto dividend entries
+          const cnt=applyPaymentDate(h.ticker,exDate,payDate);
+          if(cnt>0)updated+=cnt;
+        }
+      });
+    }catch(e){console.error('fetchSGXDividendDates error',h.ticker,e);}
+    await new Promise(function(r){setTimeout(r,500);});
+  }
+  if(updated>0||sgxHoldings.length>0){
+    try{localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:Date.now()}));}catch(e){}
+    if(updated>0){saveToFirebase();}
+    renderHoldings();renderUpcomingDivs();
+    if(updated>0)showToast(updated+' SGX dividend pay dates updated from dividends.sg');
+  }
+}
+
 function applyPaymentDate(ticker, exDate, payDate){
   // Update auto dividend entries for this ticker that are using ex-date instead of pay date
   if(!exDate||!payDate||exDate===payDate)return 0;
@@ -1950,7 +2030,52 @@ function deduplicateDividends(){
   });
 }
 deduplicateDividends();
+// ===================== AUTO-REFRESH =====================
+let autoRefreshTimer=null;
+let nextRefreshTime=null;
+
+function saveAutoRefresh(){
+  const h=parseFloat(document.getElementById('autoRefreshHours').value)||0;
+  try{localStorage.setItem('piq_autoRefreshHours', h);}catch(e){}
+  startAutoRefresh(h);
+}
+
+function startAutoRefresh(hours){
+  if(autoRefreshTimer){clearInterval(autoRefreshTimer);autoRefreshTimer=null;}
+  nextRefreshTime=null;
+  updateNextRefreshLabel();
+  if(!hours||hours<=0)return;
+  const ms=hours*60*60*1000;
+  nextRefreshTime=Date.now()+ms;
+  updateNextRefreshLabel();
+  autoRefreshTimer=setInterval(function(){
+    refreshPrices();
+    nextRefreshTime=Date.now()+ms;
+    updateNextRefreshLabel();
+  },ms);
+  // Update the countdown every minute
+  if(window._refreshCountdown)clearInterval(window._refreshCountdown);
+  window._refreshCountdown=setInterval(updateNextRefreshLabel,60000);
+}
+
+function updateNextRefreshLabel(){
+  const el=document.getElementById('nextRefreshLabel');
+  if(!el)return;
+  if(!nextRefreshTime||!autoRefreshTimer){el.textContent='';return;}
+  const mins=Math.round((nextRefreshTime-Date.now())/60000);
+  el.textContent=mins>0?'Next refresh in '+mins+'m':'Refreshing...';
+}
+
 initCharts();renderAll();updateDivChart();
+// Restore auto-refresh setting
+try{
+  const savedH=parseFloat(localStorage.getItem('piq_autoRefreshHours')||'0');
+  if(savedH>0){
+    const inp=document.getElementById('autoRefreshHours');
+    if(inp)inp.value=savedH;
+    startAutoRefresh(savedH);
+  }
+}catch(e){}
 if(firebaseConfig.databaseURL)loadFromFirebase();
 
 // ===================== DIVIDEND SCHEDULER =====================

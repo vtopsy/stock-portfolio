@@ -1912,6 +1912,26 @@ async function fetchSGXDividendDates(){
         const daysDiff=(todayTime-exTime)/(1000*60*60*24);
         if(daysDiff>=0&&daysDiff<=60){
           const existing=pendingDividends.findIndex(function(p){return p.ticker===h.ticker&&p.exDate===exDate;});
+          // Get per-share amount from dividends.sg table
+          // Find the td elements near these date cells to get the amount
+          const allTds=doc.querySelectorAll('td');
+          var amtPerShare=0;
+          for(var ti=0;ti<allTds.length;ti++){
+            if(allTds[ti]===dateCells[di]){
+              // Look backwards for amount cell (SGD amount is ~2 cells before ex-date)
+              if(ti>=2){
+                var amtText=(allTds[ti-2]&&allTds[ti-2].textContent.trim())||'';
+                // Strip currency prefix like "SGD0.0398" or "0.0398"
+                var amtNum=parseFloat(amtText.replace(/[^0-9.]/g,''));
+                if(amtNum>0)amtPerShare=amtNum;
+              }
+              break;
+            }
+          }
+          // Update liveExInfo with correct ex-date and amount
+          if(amtPerShare>0){
+            liveExInfo[h.ticker]={exDate:exDate,amtPerShare:amtPerShare,currency:h.currency||'SGD',shares:h.shares};
+          }
           const entry={ticker:h.ticker,exDate:exDate,payDate:payDate,name:h.name,source:'dividends.sg'};
           if(existing>=0)pendingDividends[existing]=Object.assign(pendingDividends[existing],entry);
           else pendingDividends.push(entry);
@@ -2080,12 +2100,20 @@ function updateNextRefreshLabel(){
 }
 
 initCharts();renderAll();updateDivChart();
-// Restore auto-refresh setting
+// Restore auto-refresh setting and check if refresh is overdue
 try{
   const savedH=parseFloat(localStorage.getItem('piq_autoRefreshHours')||'0');
   if(savedH>0){
     const inp=document.getElementById('autoRefreshHours');
     if(inp)inp.value=savedH;
+    // Check if last refresh was longer ago than the interval
+    const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');
+    const lastTs=lp.ts||0;
+    const ageHours=(Date.now()-lastTs)/1000/60/60;
+    if(ageHours>=savedH){
+      // Overdue — refresh immediately after page loads
+      setTimeout(function(){refreshPrices();},3000);
+    }
     startAutoRefresh(savedH);
   }
 }catch(e){}

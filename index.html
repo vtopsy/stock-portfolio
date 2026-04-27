@@ -1884,62 +1884,44 @@ async function fetchSGXDividendDates(){
       // Rows look like: <tr><td>27 Apr 2026</td><td>...</td><td>...</td><td>08 May 2026</td>...
       const parser=new DOMParser();
       const doc=parser.parseFromString(html,'text/html');
-      // dividends.sg uses class 'dividend-history-table__date' for date cells
-      // Table structure: Year | Yield | Amount | Amount(SGD) | Ex-Date | Pay Date | Particulars
-      // Ex-date and Pay Date cells both have class dividend-history-table__date
+      // dividends.sg table: Year|Yield|TotalAmt|SubAmt|ExDate|PayDate|Particulars
+      // Multiple rows share same ex-date (tranches) — sum sub-amounts (ti-2) per ex-date
       const dateCells=doc.querySelectorAll('td.dividend-history-table__date');
-      // Group pairs: [exDate, payDate, exDate, payDate, ...]
+      const allTds=doc.querySelectorAll('td');
+      const parseDate=function(s){if(!s)return null;var d=new Date(s);return isNaN(d)?null:d.toISOString().split('T')[0];};
+      // Build map: exDate -> {payDate, totalAmt}
+      const exDateMap={};
       for(var di=0;di<dateCells.length-1;di+=2){
-        const exDateStr=dateCells[di]&&dateCells[di].textContent.trim();
-        const payDateStr=dateCells[di+1]&&dateCells[di+1].textContent.trim();
-        const parseDate=function(s){
-          if(!s)return null;
-          // Format: YYYY-MM-DD or DD Mon YYYY
-          var d=new Date(s);
-          return isNaN(d)?null:d.toISOString().split('T')[0];
-        };
-        const exDate=parseDate(exDateStr);
-        const payDate=parseDate(payDateStr);
+        const exDate=parseDate(dateCells[di].textContent.trim());
+        const payDate=parseDate(dateCells[di+1].textContent.trim());
         if(!exDate||!payDate||exDate===payDate)continue;
-        // Update liveExDates
-        if(!liveExDates[h.ticker]||exDate>liveExDates[h.ticker]){
-          liveExDates[h.ticker]=exDate;
+        var subAmt=0;
+        for(var ti=0;ti<allTds.length;ti++){
+          if(allTds[ti]===dateCells[di]){
+            if(ti>=2){subAmt=parseFloat((allTds[ti-2].textContent.trim()).replace(/[^0-9.]/g,''))||0;}
+            break;
+          }
         }
-        // Store in pendingDividends if ex-date is recent (within 60 days) and pay date is future/recent
-        const todayStr=today();
+        if(!exDateMap[exDate])exDateMap[exDate]={payDate:payDate,totalAmt:0};
+        exDateMap[exDate].totalAmt+=subAmt;
+      }
+      const todayStr=today();
+      const todayTime=new Date(todayStr).getTime();
+      Object.keys(exDateMap).forEach(function(exDate){
+        const info=exDateMap[exDate];
         const exTime=new Date(exDate).getTime();
-        const todayTime=new Date(todayStr).getTime();
         const daysDiff=(todayTime-exTime)/(1000*60*60*24);
+        if(!liveExDates[h.ticker]||exDate>liveExDates[h.ticker])liveExDates[h.ticker]=exDate;
         if(daysDiff>=0&&daysDiff<=60){
+          if(info.totalAmt>0)liveExInfo[h.ticker]={exDate:exDate,amtPerShare:info.totalAmt,currency:h.currency||'SGD',shares:h.shares};
           const existing=pendingDividends.findIndex(function(p){return p.ticker===h.ticker&&p.exDate===exDate;});
-          // Get per-share amount from dividends.sg table
-          // Find the td elements near these date cells to get the amount
-          const allTds=doc.querySelectorAll('td');
-          var amtPerShare=0;
-          for(var ti=0;ti<allTds.length;ti++){
-            if(allTds[ti]===dateCells[di]){
-              // Look backwards for amount cell (SGD amount is ~2 cells before ex-date)
-              if(ti>=2){
-                var amtText=(allTds[ti-2]&&allTds[ti-2].textContent.trim())||'';
-                // Strip currency prefix like "SGD0.0398" or "0.0398"
-                var amtNum=parseFloat(amtText.replace(/[^0-9.]/g,''));
-                if(amtNum>0)amtPerShare=amtNum;
-              }
-              break;
-            }
-          }
-          // Update liveExInfo with correct ex-date and amount
-          if(amtPerShare>0){
-            liveExInfo[h.ticker]={exDate:exDate,amtPerShare:amtPerShare,currency:h.currency||'SGD',shares:h.shares};
-          }
-          const entry={ticker:h.ticker,exDate:exDate,payDate:payDate,name:h.name,source:'dividends.sg'};
+          const entry={ticker:h.ticker,exDate:exDate,payDate:info.payDate,name:h.name,source:'dividends.sg'};
           if(existing>=0)pendingDividends[existing]=Object.assign(pendingDividends[existing],entry);
           else pendingDividends.push(entry);
-          // Update matching auto dividend entries
-          const cnt=applyPaymentDate(h.ticker,exDate,payDate);
+          const cnt=applyPaymentDate(h.ticker,exDate,info.payDate);
           if(cnt>0)updated+=cnt;
         }
-      }
+      });
     }catch(e){console.error('fetchSGXDividendDates error',h.ticker,e);}
     await new Promise(function(r){setTimeout(r,500);});
   }

@@ -2,67 +2,110 @@ name: Refresh Stock Prices
 
 on:
   schedule:
-    - cron: '0 */3 * * *'   # Every 3 hours
-  workflow_dispatch:          # Allow manual trigger from GitHub UI
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
     steps:
-      - name: Refresh prices and write to Firebase
+      - name: Refresh prices and dividend dates
         env:
           FIREBASE_URL: https://stock-portfolio-e1b69-default-rtdb.asia-southeast1.firebasedatabase.app
           FIREBASE_SECRET: ${{ secrets.FIREBASE_SECRET }}
         run: |
           node << 'EOF'
           const https = require('https');
-
+          const http = require('http');
           const FIREBASE_URL = process.env.FIREBASE_URL;
           const FIREBASE_SECRET = process.env.FIREBASE_SECRET;
-
           const FX = { USD:1, SGD:1.35, HKD:7.82, GBP:0.79, GBX:79, EUR:0.92, JPY:151.2 };
           const toUSD = (a, c) => a / (FX[c] || 1);
 
-          function fetchJSON(url) {
+          function fetchText(url) {
             return new Promise((resolve, reject) => {
-              https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+              const mod = url.startsWith('https') ? https : http;
+              const req = mod.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36', 'Accept': 'text/html,application/json,*/*' } }, (res) => {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) return fetchText(res.headers.location).then(resolve).catch(reject);
                 let data = '';
                 res.on('data', chunk => data += chunk);
-                res.on('end', () => {
-                  try { resolve(JSON.parse(data)); }
-                  catch(e) { reject(new Error('JSON parse error: ' + data.slice(0,100))); }
-                });
-              }).on('error', reject);
+                res.on('end', () => resolve({ status: res.statusCode, body: data }));
+              });
+              req.on('error', reject);
+              req.setTimeout(10000, () => { req.destroy(); reject(new Error('Timeout')); });
             });
           }
 
-          function firebaseGet(path) {
-            const url = `${FIREBASE_URL}/${path}?auth=${FIREBASE_SECRET}`;
-            return fetchJSON(url);
-          }
-
+          function fetchJSON(url) { return fetchText(url).then(({ body }) => JSON.parse(body)); }
+          function firebaseGet(path) { return fetchJSON(`${FIREBASE_URL}/${path}?auth=${FIREBASE_SECRET}`); }
           function firebasePut(path, data) {
             return new Promise((resolve, reject) => {
               const body = JSON.stringify(data);
               const urlObj = new URL(`${FIREBASE_URL}/${path}?auth=${FIREBASE_SECRET}`);
-              const options = {
-                hostname: urlObj.hostname,
-                path: urlObj.pathname + urlObj.search,
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
-              };
-              const req = https.request(options, (res) => {
-                let d = '';
-                res.on('data', chunk => d += chunk);
-                res.on('end', () => resolve(d));
-              });
-              req.on('error', reject);
-              req.write(body);
-              req.end();
+              const options = { hostname: urlObj.hostname, path: urlObj.pathname + urlObj.search, method: 'PUT', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } };
+              const req = https.request(options, (res) => { let d=''; res.on('data', c => d+=c); res.on('end', () => resolve(d)); });
+              req.on('error', reject); req.write(body); req.end();
             });
           }
-
           function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+          function parseDate(s) { if (!s) return null; const d = new Date(s); return isNaN(d) ? null : d.toISOString().split('T')[0]; }
+          function today() { return new Date().toISOString().split('T')[0]; }
+
+          async function fetchHKDividends(hkTickers) {
+            const results = {};
+            for (const ticker of hkTickers) {
+              const code = ticker.replace('.HK','').replace('.hk','').padStart(5,'0');
+              const url = `https://www.aastocks.com/en/stocks/analysis/dividend.aspx?symbol=${code}`;
+              try {
+                const { status, body } = await fetchText(url);
+                if (status !== 200) { console.log(`aastocks ${ticker}: ${status}`); continue; }
+                const rows = [...body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+                const todayStr = today();
+                for (const row of rows) {
+                  const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g,'').trim());
+                  const datePattern = /\d{4}[\/-]\d{2}[\/-]\d{2}|\d{2}[\/-]\d{2}[\/-]\d{4}/;
+                  const dates = cells.filter(c => datePattern.test(c)).map(c => parseDate(c.replace(/\//g,'-')));
+                  if (dates.length >= 2 && dates[0] && dates[dates.length-1] && dates[0] !== dates[dates.length-1]) {
+                    const daysDiff = (new Date(todayStr) - new Date(dates[0])) / 86400000;
+                    if (daysDiff >= -30 && daysDiff <= 60) {
+                      results[ticker] = { exDate: dates[0], payDate: dates[dates.length-1] };
+                      console.log(`HK ${ticker}: ex=${dates[0]} pay=${dates[dates.length-1]}`);
+                      break;
+                    }
+                  }
+                }
+                if (!results[ticker]) console.log(`- HK ${ticker}: no recent dividend`);
+              } catch(e) { console.error(`aastocks ${ticker}:`, e.message); }
+              await sleep(800);
+            }
+            return results;
+          }
+
+          async function fetchSGXDividends(sgxTickers) {
+            const results = {};
+            for (const ticker of sgxTickers) {
+              const sym = ticker.replace('.SI','');
+              const url = `https://www.dividends.sg/view/${sym}`;
+              try {
+                const { status, body } = await fetchText(url);
+                if (status !== 200) continue;
+                const allDates = [...body.matchAll(/class=['"]dividend-history-table__date['"][^>]*>([^<]+)</gi)].map(m => parseDate(m[1].trim()));
+                const todayStr = today();
+                for (let i = 0; i < allDates.length - 1; i += 2) {
+                  const exDate = allDates[i]; const payDate = allDates[i+1];
+                  if (!exDate || !payDate || exDate === payDate) continue;
+                  const daysDiff = (new Date(todayStr) - new Date(exDate)) / 86400000;
+                  if (daysDiff >= 0 && daysDiff <= 60) {
+                    results[ticker] = { exDate, payDate };
+                    console.log(`SGX ${ticker}: ex=${exDate} pay=${payDate}`);
+                    break;
+                  }
+                }
+              } catch(e) { console.error(`dividends.sg ${ticker}:`, e.message); }
+              await sleep(500);
+            }
+            return results;
+          }
 
           async function fetchYahoo(ticker) {
             const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=3mo&events=dividends`;
@@ -71,93 +114,76 @@ jobs:
               const result = data?.chart?.result?.[0];
               const meta = result?.meta;
               if (!meta?.regularMarketPrice) return null;
-
               const isLSE = meta.currency === 'GBX' || meta.currency === 'GBp' || ticker.endsWith('.L');
               let price = meta.regularMarketPrice;
-              let prev = meta.previousClose || price;
               let currency = isLSE ? 'GBP' : (meta.currency || 'USD');
-
-              if (isLSE) { price /= 100; prev /= 100; }
-
+              if (isLSE) price /= 100;
               const priceUSD = toUSD(price, currency);
-
-              // Extract latest ex-date and amount from events
               const divEvents = result?.events?.dividends;
               let exDate = null, amtPerShare = 0;
               if (divEvents) {
-                const evList = Object.values(divEvents)
-                  .map(ev => ({ date: new Date(ev.date * 1000).toISOString().split('T')[0], amount: ev.amount }))
-                  .sort((a, b) => a.date.localeCompare(b.date));
-                if (evList.length) {
-                  const latest = evList[evList.length - 1];
-                  exDate = latest.date;
-                  amtPerShare = isLSE ? latest.amount / 100 : latest.amount;
-                }
+                const evList = Object.values(divEvents).map(ev => ({ date: new Date(ev.date*1000).toISOString().split('T')[0], amount: ev.amount })).sort((a,b) => a.date.localeCompare(b.date));
+                if (evList.length) { exDate = evList[evList.length-1].date; amtPerShare = isLSE ? evList[evList.length-1].amount/100 : evList[evList.length-1].amount; }
               }
-
-              return { ticker, priceUSD, currency, exDate, amtPerShare, ts: Date.now() };
-            } catch(e) {
-              console.error(`Error fetching ${ticker}:`, e.message);
-              return null;
-            }
+              return { ticker, priceUSD, currency, exDate, amtPerShare };
+            } catch(e) { console.error(`Yahoo ${ticker}:`, e.message); return null; }
           }
 
           async function main() {
-            console.log('Fetching portfolio from Firebase...');
+            console.log('Loading portfolio from Firebase...');
             const portfolio = await firebaseGet('portfolio.json');
-            if (!portfolio?.transactions) { console.log('No transactions found'); return; }
+            if (!portfolio?.transactions) { console.log('No transactions'); return; }
 
-            // Get unique tickers from open positions
-            const sold = new Set();
-            const bought = new Set();
+            const txByTicker = {};
             portfolio.transactions.forEach(tx => {
-              if ((tx.action||'').toUpperCase() === 'SELL') sold.add(tx.ticker);
-              else bought.add(tx.ticker);
+              if (!txByTicker[tx.ticker]) txByTicker[tx.ticker] = { buys:0, sells:0, exchange:tx.exchange };
+              if ((tx.action||'').toUpperCase()==='SELL') txByTicker[tx.ticker].sells += tx.shares||0;
+              else txByTicker[tx.ticker].buys += tx.shares||0;
             });
-            const tickers = [...bought].filter(t => !sold.has(t) || [...portfolio.transactions].filter(tx=>tx.ticker===t&&tx.action==='BUY').length > [...portfolio.transactions].filter(tx=>tx.ticker===t&&tx.action==='SELL').length);
+            const openHoldings = Object.entries(txByTicker).filter(([,v]) => v.buys > v.sells).map(([t,v]) => ({ ticker:t, exchange:v.exchange }));
+            const hkTickers = openHoldings.filter(h => h.exchange==='HKEX').map(h => h.ticker);
+            const sgxTickers = openHoldings.filter(h => h.exchange==='SGX').map(h => h.ticker);
+            const allTickers = [...new Set([...openHoldings.map(h => h.ticker), ...(portfolio.watchlist||[]).map(w => w.ticker).filter(Boolean)])].slice(0,25);
 
-            // Also include watchlist tickers
-            if (portfolio.watchlist) {
-              portfolio.watchlist.forEach(w => { if (w.ticker) tickers.push(w.ticker); });
-            }
-            const uniqueTickers = [...new Set(tickers)].slice(0, 25);
-            console.log(`Fetching prices for ${uniqueTickers.length} tickers:`, uniqueTickers.join(', '));
+            console.log(`Tickers: ${allTickers.join(', ')}`);
 
-            const livePrices = {};
-            const liveExDates = {};
-            const liveExInfo = {};
-
-            for (const ticker of uniqueTickers) {
-              const result = await fetchYahoo(ticker);
-              if (result) {
-                livePrices[ticker] = result.priceUSD;
-                if (result.exDate) {
-                  liveExDates[ticker] = result.exDate;
-                  liveExInfo[ticker] = {
-                    exDate: result.exDate,
-                    amtPerShare: result.amtPerShare,
-                    currency: result.currency,
-                  };
-                }
-                console.log(`✓ ${ticker}: USD ${result.priceUSD.toFixed(4)} | ex-date: ${result.exDate || '--'}`);
-              } else {
-                console.log(`✗ ${ticker}: failed`);
+            const livePrices = {}, liveExDates = {}, liveExInfo = {};
+            for (const ticker of allTickers) {
+              const r = await fetchYahoo(ticker);
+              if (r) {
+                livePrices[ticker] = r.priceUSD;
+                if (r.exDate) { liveExDates[ticker] = r.exDate; liveExInfo[ticker] = { exDate:r.exDate, amtPerShare:r.amtPerShare, currency:r.currency }; }
+                console.log(`Yahoo ${ticker}: USD ${r.priceUSD.toFixed(4)}`);
               }
               await sleep(1200);
             }
 
-            // Write prices to Firebase under a separate node
-            const priceData = {
-              livePrices,
-              liveExDates,
-              liveExInfo,
-              ts: Date.now(),
-              updatedAt: new Date().toISOString()
-            };
+            console.log('Fetching HK dividends from aastocks...');
+            const hkDivs = await fetchHKDividends(hkTickers);
 
-            console.log('Writing prices to Firebase...');
+            console.log('Fetching SGX dividends from dividends.sg...');
+            const sgxDivs = await fetchSGXDividends(sgxTickers);
+
+            const allDivs = { ...hkDivs, ...sgxDivs };
+            Object.entries(allDivs).forEach(([ticker, info]) => {
+              liveExDates[ticker] = info.exDate;
+              if (!liveExInfo[ticker]) liveExInfo[ticker] = { exDate:info.exDate, amtPerShare:0, currency: hkDivs[ticker]?'HKD':'SGD' };
+              else liveExInfo[ticker].exDate = info.exDate;
+            });
+
+            const existingPrices = await firebaseGet('prices.json').catch(() => ({}));
+            const pendingDividends = existingPrices?.pendingDividends || [];
+            Object.entries(allDivs).forEach(([ticker, info]) => {
+              const idx = pendingDividends.findIndex(p => p.ticker===ticker && p.exDate===info.exDate);
+              const entry = { ticker, exDate:info.exDate, payDate:info.payDate };
+              if (idx >= 0) Object.assign(pendingDividends[idx], entry);
+              else pendingDividends.push(entry);
+            });
+
+            const priceData = { livePrices, liveExDates, liveExInfo, pendingDividends, ts:Date.now(), updatedAt:new Date().toISOString() };
+            console.log('Writing to Firebase...');
             await firebasePut('prices.json', priceData);
-            console.log(`Done. Updated ${Object.keys(livePrices).length} prices at ${priceData.updatedAt}`);
+            console.log(`Done: ${Object.keys(livePrices).length} prices, ${Object.keys(hkDivs).length} HK divs, ${Object.keys(sgxDivs).length} SGX divs`);
           }
 
           main().catch(e => { console.error('Fatal:', e); process.exit(1); });

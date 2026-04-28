@@ -1103,7 +1103,13 @@ function renderDivHistory(){
   const todayStr2=today();
   const divToShow=dividends.filter(function(d){
     if(d.upcoming)return false; // explicitly marked upcoming
-    if(!d.payDate&&d.auto&&d.date>=todayStr2)return false; // auto entry with no pay date and future date
+    // Hide auto entries where payment hasn't been confirmed via cash transaction
+    if(d.auto){
+      const hasCash=cashTxList.some(function(ct){
+        return (ct.type||'').toUpperCase()==='DIVIDEND'&&ct.symbol===d.ticker&&ct.date===d.date;
+      });
+      if(!hasCash)return false;
+    }
     return true;
   });
   document.getElementById('divHistBody').innerHTML=divToShow.length
@@ -1959,6 +1965,15 @@ async function loadFirebasePrices(){
     Object.assign(livePrices,data.livePrices);
     if(data.liveExDates)Object.assign(liveExDates,data.liveExDates);
     if(data.liveExInfo)Object.assign(liveExInfo,data.liveExInfo);
+    // Merge server pendingDividends (HK+SGX pay dates from aastocks/dividends.sg)
+    if(data.pendingDividends&&data.pendingDividends.length){
+      data.pendingDividends.forEach(function(p){
+        const idx=pendingDividends.findIndex(function(x){return x.ticker===p.ticker&&x.exDate===p.exDate;});
+        if(idx>=0)Object.assign(pendingDividends[idx],p);
+        else pendingDividends.push(p);
+        if(p.exDate)liveExDates[p.ticker]=p.exDate;
+      });
+    }
     // Update localStorage cache
     try{const ts=data.ts||Date.now();localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:ts}));updateLastRefreshedLabel(ts);}catch(e){}
     renderHoldings();renderUpcomingDivs();

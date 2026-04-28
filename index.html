@@ -1099,8 +1099,15 @@ function renderDivYearlyTable(){
 }
 
 function renderDivHistory(){
-  document.getElementById('divHistBody').innerHTML=dividends.length
-    ?'<table class="tbl"><thead><tr><th>Pay Date</th><th>Ex-Date</th><th>Ticker</th><th>Name</th><th class="r">Amount</th></tr></thead><tbody>'+[...dividends].sort(function(a,b){return new Date(b.date)-new Date(a.date);}).map(function(d){
+  // Filter out upcoming/pending entries — those belong in Upcoming Dividends section only
+  const todayStr2=today();
+  const divToShow=dividends.filter(function(d){
+    if(d.upcoming)return false; // explicitly marked upcoming
+    if(!d.payDate&&d.auto&&d.date>=todayStr2)return false; // auto entry with no pay date and future date
+    return true;
+  });
+  document.getElementById('divHistBody').innerHTML=divToShow.length
+    ?'<table class="tbl"><thead><tr><th>Pay Date</th><th>Ex-Date</th><th>Ticker</th><th>Name</th><th class="r">Amount</th></tr></thead><tbody>'+[...divToShow].sort(function(a,b){return new Date(b.date)-new Date(a.date);}).map(function(d){
       const ct=cashTxList.find(function(c){return (c.type||'').toUpperCase()==='DIVIDEND'&&c.symbol===d.ticker&&c.date===d.date&&Math.abs(toUSD(parseFloat(c.amount)||0,c.currency||baseCurrency)-d.amount)<0.5;});
       const origCur=(ct&&ct.currency)||(openH().find(function(h){return h.ticker===d.ticker;})||{}).currency||baseCurrency;
       const origAmt=ct?parseFloat(ct.amount):(d.amount*(FX[origCur]||1));

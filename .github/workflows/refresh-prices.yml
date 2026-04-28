@@ -1,0 +1,164 @@
+name: Refresh Stock Prices
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'   # Every 3 hours
+  workflow_dispatch:          # Allow manual trigger from GitHub UI
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refresh prices and write to Firebase
+        env:
+          FIREBASE_URL: https://stock-portfolio-e1b69-default-rtdb.asia-southeast1.firebasedatabase.app
+          FIREBASE_SECRET: ${{ secrets.FIREBASE_SECRET }}
+        run: |
+          node << 'EOF'
+          const https = require('https');
+
+          const FIREBASE_URL = process.env.FIREBASE_URL;
+          const FIREBASE_SECRET = process.env.FIREBASE_SECRET;
+
+          const FX = { USD:1, SGD:1.35, HKD:7.82, GBP:0.79, GBX:79, EUR:0.92, JPY:151.2 };
+          const toUSD = (a, c) => a / (FX[c] || 1);
+
+          function fetchJSON(url) {
+            return new Promise((resolve, reject) => {
+              https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                  try { resolve(JSON.parse(data)); }
+                  catch(e) { reject(new Error('JSON parse error: ' + data.slice(0,100))); }
+                });
+              }).on('error', reject);
+            });
+          }
+
+          function firebaseGet(path) {
+            const url = `${FIREBASE_URL}/${path}?auth=${FIREBASE_SECRET}`;
+            return fetchJSON(url);
+          }
+
+          function firebasePut(path, data) {
+            return new Promise((resolve, reject) => {
+              const body = JSON.stringify(data);
+              const urlObj = new URL(`${FIREBASE_URL}/${path}?auth=${FIREBASE_SECRET}`);
+              const options = {
+                hostname: urlObj.hostname,
+                path: urlObj.pathname + urlObj.search,
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+              };
+              const req = https.request(options, (res) => {
+                let d = '';
+                res.on('data', chunk => d += chunk);
+                res.on('end', () => resolve(d));
+              });
+              req.on('error', reject);
+              req.write(body);
+              req.end();
+            });
+          }
+
+          function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+          async function fetchYahoo(ticker) {
+            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=3mo&events=dividends`;
+            try {
+              const data = await fetchJSON(url);
+              const result = data?.chart?.result?.[0];
+              const meta = result?.meta;
+              if (!meta?.regularMarketPrice) return null;
+
+              const isLSE = meta.currency === 'GBX' || meta.currency === 'GBp' || ticker.endsWith('.L');
+              let price = meta.regularMarketPrice;
+              let prev = meta.previousClose || price;
+              let currency = isLSE ? 'GBP' : (meta.currency || 'USD');
+
+              if (isLSE) { price /= 100; prev /= 100; }
+
+              const priceUSD = toUSD(price, currency);
+
+              // Extract latest ex-date and amount from events
+              const divEvents = result?.events?.dividends;
+              let exDate = null, amtPerShare = 0;
+              if (divEvents) {
+                const evList = Object.values(divEvents)
+                  .map(ev => ({ date: new Date(ev.date * 1000).toISOString().split('T')[0], amount: ev.amount }))
+                  .sort((a, b) => a.date.localeCompare(b.date));
+                if (evList.length) {
+                  const latest = evList[evList.length - 1];
+                  exDate = latest.date;
+                  amtPerShare = isLSE ? latest.amount / 100 : latest.amount;
+                }
+              }
+
+              return { ticker, priceUSD, currency, exDate, amtPerShare, ts: Date.now() };
+            } catch(e) {
+              console.error(`Error fetching ${ticker}:`, e.message);
+              return null;
+            }
+          }
+
+          async function main() {
+            console.log('Fetching portfolio from Firebase...');
+            const portfolio = await firebaseGet('portfolio.json');
+            if (!portfolio?.transactions) { console.log('No transactions found'); return; }
+
+            // Get unique tickers from open positions
+            const sold = new Set();
+            const bought = new Set();
+            portfolio.transactions.forEach(tx => {
+              if ((tx.action||'').toUpperCase() === 'SELL') sold.add(tx.ticker);
+              else bought.add(tx.ticker);
+            });
+            const tickers = [...bought].filter(t => !sold.has(t) || [...portfolio.transactions].filter(tx=>tx.ticker===t&&tx.action==='BUY').length > [...portfolio.transactions].filter(tx=>tx.ticker===t&&tx.action==='SELL').length);
+
+            // Also include watchlist tickers
+            if (portfolio.watchlist) {
+              portfolio.watchlist.forEach(w => { if (w.ticker) tickers.push(w.ticker); });
+            }
+            const uniqueTickers = [...new Set(tickers)].slice(0, 25);
+            console.log(`Fetching prices for ${uniqueTickers.length} tickers:`, uniqueTickers.join(', '));
+
+            const livePrices = {};
+            const liveExDates = {};
+            const liveExInfo = {};
+
+            for (const ticker of uniqueTickers) {
+              const result = await fetchYahoo(ticker);
+              if (result) {
+                livePrices[ticker] = result.priceUSD;
+                if (result.exDate) {
+                  liveExDates[ticker] = result.exDate;
+                  liveExInfo[ticker] = {
+                    exDate: result.exDate,
+                    amtPerShare: result.amtPerShare,
+                    currency: result.currency,
+                  };
+                }
+                console.log(`✓ ${ticker}: USD ${result.priceUSD.toFixed(4)} | ex-date: ${result.exDate || '--'}`);
+              } else {
+                console.log(`✗ ${ticker}: failed`);
+              }
+              await sleep(1200);
+            }
+
+            // Write prices to Firebase under a separate node
+            const priceData = {
+              livePrices,
+              liveExDates,
+              liveExInfo,
+              ts: Date.now(),
+              updatedAt: new Date().toISOString()
+            };
+
+            console.log('Writing prices to Firebase...');
+            await firebasePut('prices.json', priceData);
+            console.log(`Done. Updated ${Object.keys(livePrices).length} prices at ${priceData.updatedAt}`);
+          }
+
+          main().catch(e => { console.error('Fatal:', e); process.exit(1); });
+          EOF

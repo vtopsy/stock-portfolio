@@ -1906,20 +1906,10 @@ async function fetchSGXDividendDates(){
             break;
           }
         }
-        if(!exDateMap[exDate]){
-          // First row for this ex-date has the combined total — store it but mark as 'first'
-          exDateMap[exDate]={payDate:payDate,totalAmt:0,firstAmt:subAmt,rowCount:0};
-        } else {
-          // Subsequent rows are sub-components — sum them
-          exDateMap[exDate].totalAmt+=subAmt;
-          exDateMap[exDate].rowCount++;
-        }
+        // All rows are sub-components — sum all of them
+        if(!exDateMap[exDate])exDateMap[exDate]={payDate:payDate,totalAmt:0};
+        exDateMap[exDate].totalAmt+=subAmt;
       }
-      // If only 1 row (no sub-components), use firstAmt; otherwise use summed sub-amounts
-      Object.keys(exDateMap).forEach(function(k){
-        var e=exDateMap[k];
-        if(e.rowCount===0)e.totalAmt=e.firstAmt;
-      });
       const todayStr=today();
       const todayTime=new Date(todayStr).getTime();
       Object.keys(exDateMap).forEach(function(exDate){

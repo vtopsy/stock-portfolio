@@ -1900,7 +1900,9 @@ async function fetchSGXDividendDates(){
         var subAmt=0;
         for(var ti=0;ti<allTds.length;ti++){
           if(allTds[ti]===dateCells[di]){
-            if(ti>=2){subAmt=parseFloat((allTds[ti-2].textContent.trim()).replace(/[^0-9.]/g,''))||0;}
+            // td structure: ...SGDAmount | ExDate | PayDate | Particulars...
+            // Sub-amount is 1 cell before ex-date (ti-1)
+            if(ti>=1){subAmt=parseFloat((allTds[ti-1].textContent.trim()).replace(/[^0-9.]/g,''))||0;}
             break;
           }
         }

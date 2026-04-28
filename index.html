@@ -1821,6 +1821,8 @@ async function loadFromFirebase(){
       document.getElementById('syncStatus').textContent='Loaded';
       document.getElementById('fbStatus').textContent='Loaded successfully';
       showToast('Loaded from Firebase');
+      // Also load server-refreshed prices from Firebase prices node
+      loadFirebasePrices();
     }else{
       document.getElementById('fbStatus').textContent='No data found';
       showToast('No data in Firebase','#2e1a1a');
@@ -1931,6 +1933,28 @@ async function fetchSGXDividendDates(){
     renderHoldings();renderUpcomingDivs();
     if(updated>0)showToast(updated+' SGX dividend pay dates updated from dividends.sg');
   }
+}
+
+async function loadFirebasePrices(){
+  if(!firebaseConfig.databaseURL)return;
+  try{
+    const res=await fetch(getFirebaseUrl('prices.json'));
+    if(!res.ok)return;
+    const data=await res.json();
+    if(!data||!data.livePrices)return;
+    // Only use if newer than cached localStorage prices
+    const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');
+    if(data.ts&&lp.ts&&data.ts<=lp.ts)return; // localStorage is newer
+    // Apply server prices
+    Object.assign(livePrices,data.livePrices);
+    if(data.liveExDates)Object.assign(liveExDates,data.liveExDates);
+    if(data.liveExInfo)Object.assign(liveExInfo,data.liveExInfo);
+    // Update localStorage cache
+    try{const ts=data.ts||Date.now();localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:ts}));updateLastRefreshedLabel(ts);}catch(e){}
+    renderHoldings();renderUpcomingDivs();
+    document.getElementById('syncStatus').textContent='Live (server)';
+    console.log('Loaded server prices from Firebase, updated at',data.updatedAt);
+  }catch(e){console.error('loadFirebasePrices error',e);}
 }
 
 function updateLastRefreshedLabel(ts){

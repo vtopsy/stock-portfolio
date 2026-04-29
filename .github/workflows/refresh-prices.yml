@@ -67,7 +67,7 @@ jobs:
                   const dates = cells.filter(c => datePattern.test(c)).map(c => parseDate(c.replace(/\//g,'-')));
                   if (dates.length >= 2 && dates[0] && dates[dates.length-1] && dates[0] !== dates[dates.length-1]) {
                     const daysDiff = (new Date(todayStr) - new Date(dates[0])) / 86400000;
-                    if (daysDiff >= -30 && daysDiff <= 60) {
+                    if (daysDiff >= -120 && daysDiff <= 30) {
                       results[ticker] = { exDate: dates[0], payDate: dates[dates.length-1] };
                       console.log(`HK ${ticker}: ex=${dates[0]} pay=${dates[dates.length-1]}`);
                       break;
@@ -188,3 +188,4 @@ jobs:
 
           main().catch(e => { console.error('Fatal:', e); process.exit(1); });
           EOF
+# Note: aastocks window extended to 120 days

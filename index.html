@@ -1102,13 +1102,19 @@ function renderDivHistory(){
   // Filter out upcoming/pending entries — those belong in Upcoming Dividends section only
   const todayStr2=today();
   const divToShow=dividends.filter(function(d){
-    if(d.upcoming)return false; // explicitly marked upcoming
-    // Hide auto entries where payment hasn't been confirmed via cash transaction
+    if(d.upcoming)return false;
     if(d.auto){
-      const hasCash=cashTxList.some(function(ct){
-        return (ct.type||'').toUpperCase()==='DIVIDEND'&&ct.symbol===d.ticker&&ct.date===d.date;
-      });
-      if(!hasCash)return false;
+      // Hide if payment date is in the future and no cash entry exists within 45 days
+      const payDate=d.payDate||d.date;
+      if(payDate>=todayStr2){
+        // Future payment — only show if we have a confirmed cash entry
+        const hasCash=cashTxList.some(function(ct){
+          if((ct.type||'').toUpperCase()!=='DIVIDEND'||ct.symbol!==d.ticker)return false;
+          const daysDiff=Math.abs(new Date(ct.date).getTime()-new Date(payDate).getTime())/(1000*60*60*24);
+          return daysDiff<=45;
+        });
+        if(!hasCash)return false;
+      }
     }
     return true;
   });
@@ -1409,7 +1415,7 @@ async function refreshPrices(){
     try{
       // Use 3mo range with events=dividends — just enough to catch recent/upcoming payouts
       // We only add dividends AFTER the latest one already recorded for this ticker
-      const url='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(ticker)+'?interval=1d&range=3mo&events=dividends';
+      const url='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(ticker)+'?interval=1d&range=6mo&events=dividends';
       const proxy='https://corsproxy.io/?'+encodeURIComponent(url);
       const res=await fetch(proxy);
       if(res.ok){

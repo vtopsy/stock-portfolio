@@ -1565,17 +1565,16 @@ var nameCache={};
 async function fetchStockName(ticker){
   if(nameCache[ticker])return nameCache[ticker];
   try{
-    var url='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(ticker)+'?interval=1d&range=1d';
+    var url='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(ticker)+'?interval=1d&range=5d';
     var proxy='https://corsproxy.io/?'+encodeURIComponent(url);
     var res=await fetch(proxy);
-    if(res.ok){
-      var data=await res.json();
-      var meta=data&&data.chart&&data.chart.result&&data.chart.result[0]&&data.chart.result[0].meta;
-      var name=(meta&&(meta.longName||meta.shortName))||'';
-      if(name){nameCache[ticker]=name;return name;}
-    }
-  }catch(e){}
-  return '';
+    if(!res.ok)return '';
+    var data=await res.json();
+    var meta=data&&data.chart&&data.chart.result&&data.chart.result[0]&&data.chart.result[0].meta;
+    var name=(meta&&(meta.longName||meta.shortName))||'';
+    if(name){nameCache[ticker]=name;}
+    return name;
+  }catch(e){return '';}
 }
 
 async function enrichTransactionNames(){
@@ -1597,7 +1596,7 @@ async function enrichTransactionNames(){
       transactions.forEach(function(t){if(t.ticker===ticker&&(!t.name||t.name===ticker||t.name===t.exchange||t.name===t.currency))t.name=name;});
       updated++;
     }
-    await new Promise(function(r){setTimeout(r,400);});
+    await new Promise(function(r){setTimeout(r,800);});
   }
   if(updated>0||tickers.length>0){renderTransactions();renderHoldings();saveToFirebase();if(updated>0)showToast(updated+' stock names updated');}
 }
@@ -1620,9 +1619,18 @@ function importCSV(event){
       cashTxList.push({type:txAction==='Sell'?'SELL':'BUY',date:date,currency:currency,amount:Math.abs(totalAfter),details:txAction+' '+units+' shares of '+(label||symbol)+' @ '+currency+price,symbol:symbol,stockName:label||symbol,portfolio:exchange});
       added++;
     });
-    renderAll();saveToFirebase();showToast('Imported '+added+' transactions. Fetching names...');event.target.value='';
-    enrichTransactionNames();
+    renderAll();saveToFirebase();showToast('Imported '+added+' transactions');event.target.value='';
+    setTimeout(enrichTransactionNames, 2000);
   },error:function(e){showToast('Parse error: '+e.message,'#2e1a1a');}});
+}
+
+function buildTickerFromPrefixed(prefixedSymbol){
+  if(!prefixedSymbol)return '';
+  var s=String(prefixedSymbol).trim();
+  var parts=s.split(':');
+  var exchange=parts.length>1?parts[0].toUpperCase():'';
+  var raw=parts.length>1?parts[1]:parts[0];
+  return buildTicker(raw,exchange||'USX');
 }
 
 function importCashCSV(event){

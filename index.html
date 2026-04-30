@@ -1608,15 +1608,17 @@ function importCSV(event){
     if(rows.length&&isNaN(parseFloat(rows[0][0])))rows=rows.slice(1);
     var added=0;
     rows.forEach(function(r){
-      const action=parseInt(r[0]),exchange=String(r[1]||'').trim(),symbol=String(r[2]||'').trim().toUpperCase();
+      const action=parseInt(r[0]),exchange=String(r[1]||'').trim(),rawSym=String(r[2]||'').trim().toUpperCase();
       const units=parseFloat(r[3])||0,price=parseFloat(r[4])||0,date=String(r[5]||'').trim();
       const currency=String(r[6]||'USD').trim(),totalAfter=parseFloat(r[8])||(units*price);
       const label=String(r[9]||'').trim(),notes=String(r[10]||'').trim();
-      if(!symbol)return;
+      if(!rawSym)return;
+      // Build Yahoo-compatible ticker with exchange suffix
+      const ticker=buildTicker(rawSym,exchange);
       const fees=Math.max(0,totalAfter-(units*price));
       const txAction=action===1?'Buy':action===-1?'Sell':'Fee';
-      transactions.push({action:txAction,exchange:exchange,ticker:symbol,name:nameCache[symbol]||symbol,shares:units,price:price,fees:fees,currency:currency,date:date,notes:notes,totalAfterFees:totalAfter});
-      cashTxList.push({type:txAction==='Sell'?'SELL':'BUY',date:date,currency:currency,amount:Math.abs(totalAfter),details:txAction+' '+units+' shares of '+(label||symbol)+' @ '+currency+price,symbol:symbol,stockName:label||symbol,portfolio:exchange});
+      transactions.push({action:txAction,exchange:exchange,ticker:ticker,name:nameCache[ticker]||ticker,shares:units,price:price,fees:fees,currency:currency,date:date,notes:notes,totalAfterFees:totalAfter});
+      cashTxList.push({type:txAction==='Sell'?'SELL':'BUY',date:date,currency:currency,amount:Math.abs(totalAfter),details:txAction+' '+units+' shares of '+(label||ticker)+' @ '+currency+price,symbol:ticker,stockName:label||ticker,portfolio:exchange});
       added++;
     });
     renderAll();saveToFirebase();showToast('Imported '+added+' transactions');event.target.value='';

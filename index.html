@@ -1105,18 +1105,10 @@ function renderDivHistory(){
   const todayStr2=today();
   const divToShow=dividends.filter(function(d){
     if(d.upcoming)return false;
+    // Auto entries with future payment date belong in Upcoming Dividends only
     if(d.auto){
-      // Hide if payment date is in the future and no cash entry exists within 45 days
       const payDate=d.payDate||d.date;
-      if(payDate>=todayStr2){
-        // Future payment — only show if we have a confirmed cash entry
-        const hasCash=cashTxList.some(function(ct){
-          if((ct.type||'').toUpperCase()!=='DIVIDEND'||ct.symbol!==d.ticker)return false;
-          const daysDiff=Math.abs(new Date(ct.date).getTime()-new Date(payDate).getTime())/(1000*60*60*24);
-          return daysDiff<=45;
-        });
-        if(!hasCash)return false;
-      }
+      if(payDate>todayStr2)return false;
     }
     return true;
   });

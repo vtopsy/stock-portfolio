@@ -2032,8 +2032,9 @@ function deduplicateDividends(){
       return (c.type||'').toUpperCase()==='DIVIDEND' && c.symbol===ct.symbol && c.date===ct.date;
     });
     // Check if this specific amount already has a matching dividends record
+    // Use 20% tolerance to handle FX rate differences
     const amtMatched=existingForDate.some(function(d){
-      return Math.abs(d.amount-amtUSD)<0.5;
+      return Math.abs(d.amount-amtUSD)<Math.max(amtUSD*0.2, 0.5);
     });
     if(!amtMatched){
       const key='DIV_'+ct.symbol+'_'+ct.date+'_'+amtUSD.toFixed(4);

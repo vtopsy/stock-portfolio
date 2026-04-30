@@ -1423,6 +1423,7 @@ async function refreshPrices(){
         const result=data&&data.chart&&data.chart.result&&data.chart.result[0];
         const meta=result&&result.meta;
         if(meta&&meta.regularMarketPrice>0){
+          if(meta.longName||meta.shortName) nameCache[ticker]=meta.longName||meta.shortName;
           const h=buildHoldings().find(function(x){return x.ticker===ticker;});
           let price = meta.regularMarketPrice;
           let prev = meta.previousClose || price;
@@ -1580,18 +1581,25 @@ async function fetchStockName(ticker){
 async function enrichTransactionNames(){
   var tickers=[...new Set(transactions.map(function(t){return t.ticker;}).filter(Boolean))];
   var updated=0;
+  // First apply any names already in nameCache (from previous fetches or refreshPrices)
+  tickers.forEach(function(ticker){
+    if(nameCache[ticker]){
+      transactions.forEach(function(t){if(t.ticker===ticker&&(!t.name||t.name===ticker||t.name===t.exchange||t.name===t.currency))t.name=nameCache[ticker];});
+    }
+  });
+  // Then fetch missing names from Yahoo
   for(var i=0;i<tickers.length;i++){
     var ticker=tickers[i];
-    if(nameCache[ticker])continue; // already fetched
+    if(nameCache[ticker])continue;
     var name=await fetchStockName(ticker);
     if(name){
       nameCache[ticker]=name;
-      transactions.forEach(function(t){if(t.ticker===ticker&&(!t.name||t.name===ticker||t.name===t.exchange))t.name=name;});
+      transactions.forEach(function(t){if(t.ticker===ticker&&(!t.name||t.name===ticker||t.name===t.exchange||t.name===t.currency))t.name=name;});
       updated++;
     }
-    await new Promise(function(r){setTimeout(r,300);});
+    await new Promise(function(r){setTimeout(r,400);});
   }
-  if(updated>0){renderTransactions();renderHoldings();saveToFirebase();showToast('Stock names updated');}
+  if(updated>0||tickers.length>0){renderTransactions();renderHoldings();saveToFirebase();if(updated>0)showToast(updated+' stock names updated');}
 }
 
 function importCSV(event){

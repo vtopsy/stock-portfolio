@@ -597,7 +597,9 @@ function totalDivReceivedUSD(ticker){
 // ===================== HOLDINGS =====================
 function buildHoldings(){
   const map={};
-  transactions.forEach(tx=>{
+  // Sort by date ascending so sells are processed after their corresponding buys
+  const sorted=[...transactions].sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
+  sorted.forEach(tx=>{
     const k=tx.ticker; if(!k)return;
     if(!map[k])map[k]={ticker:k,name:tx.name||k,exchange:tx.exchange||'',geo:geoMap[tx.exchange]||'US',currency:tx.currency||'USD',shares:0,totalCostUSD:0,price:0,divYield:0,beta:1};
     const pUSD=toUSD(tx.price||0,tx.currency||'USD');

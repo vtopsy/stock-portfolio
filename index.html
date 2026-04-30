@@ -1122,7 +1122,15 @@ function renderDivHistory(){
   });
   document.getElementById('divHistBody').innerHTML=divToShow.length
     ?'<table class="tbl"><thead><tr><th>Pay Date</th><th>Ex-Date</th><th>Ticker</th><th>Name</th><th class="r">Amount</th></tr></thead><tbody>'+[...divToShow].sort(function(a,b){return new Date(b.date)-new Date(a.date);}).map(function(d){
-      const ct=cashTxList.find(function(c){return (c.type||'').toUpperCase()==='DIVIDEND'&&c.symbol===d.ticker&&c.date===d.date&&Math.abs(toUSD(parseFloat(c.amount)||0,c.currency||baseCurrency)-d.amount)<0.5;});
+      // Find matching cash entry — use same-date match first, then fall back to amount proximity
+      var ct=cashTxList.find(function(c){
+        if((c.type||'').toUpperCase()!=='DIVIDEND'||c.symbol!==d.ticker||c.date!==d.date)return false;
+        var ctUSD=toUSD(Math.abs(parseFloat(c.amount)||0),c.currency||baseCurrency);
+        // Accept if within 20% or within $1 (handles FX rate drift)
+        return Math.abs(ctUSD-d.amount)<Math.max(d.amount*0.2,1);
+      });
+      // If no close match, just use same ticker+date regardless of amount
+      if(!ct)ct=cashTxList.find(function(c){return (c.type||'').toUpperCase()==='DIVIDEND'&&c.symbol===d.ticker&&c.date===d.date;});
       const origCur=(ct&&ct.currency)||(openH().find(function(h){return h.ticker===d.ticker;})||{}).currency||baseCurrency;
       const origAmt=ct?parseFloat(ct.amount):(d.amount*(FX[origCur]||1));
       const dispAmt=origCur+' '+origAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});

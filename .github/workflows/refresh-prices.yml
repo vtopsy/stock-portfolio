@@ -59,7 +59,7 @@ jobs:
               try {
                 const { status, body } = await fetchText(url);
                 if (status !== 200) { console.log(`aastocks ${ticker}: ${status}`); continue; }
-                const rows = [...body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+                if (ticker === hkTickers[0]) console.log(`aastocks sample: ${body.slice(0,1000)}`);
                 const todayStr = today();
                 for (const row of rows) {
                   const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g,'').trim());
@@ -89,7 +89,8 @@ jobs:
               try {
                 const { status, body } = await fetchText(url);
                 if (status !== 200) continue;
-                const allDates = [...body.matchAll(/class=['"]dividend-history-table__date['"][^>]*>([^<]+)</gi)].map(m => parseDate(m[1].trim()));
+                // Debug: print first 2000 chars to see structure
+                if (ticker === sgxTickers[0]) console.log(`dividends.sg sample HTML: ${body.slice(0,2000)}`);
                 const todayStr = today();
                 for (let i = 0; i < allDates.length - 1; i += 2) {
                   const exDate = allDates[i]; const payDate = allDates[i+1];
@@ -103,6 +104,33 @@ jobs:
                 }
               } catch(e) { console.error(`dividends.sg ${ticker}:`, e.message); }
               await sleep(500);
+            }
+            return results;
+          }
+
+          // Fetch LSE dividend payment dates via Yahoo calendarEvents
+          async function fetchLSEDividends(lseTickers) {
+            const results = {};
+            for (const ticker of lseTickers) {
+              const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=calendarEvents`;
+              try {
+                const data = await fetchJSON(url);
+                const cal = data?.quoteSummary?.result?.[0]?.calendarEvents;
+                if (!cal) { console.log(`- LSE ${ticker}: no calendarEvents`); continue; }
+                const exTs = cal.exDividendDate?.raw;
+                const payTs = cal.dividendDate?.raw;
+                if (exTs && payTs) {
+                  const exDate = new Date(exTs * 1000).toISOString().split('T')[0];
+                  const payDate = new Date(payTs * 1000).toISOString().split('T')[0];
+                  if (exDate !== payDate) {
+                    results[ticker] = { exDate, payDate };
+                    console.log(`LSE ${ticker}: ex=${exDate} pay=${payDate}`);
+                  }
+                } else {
+                  console.log(`- LSE ${ticker}: no dividend dates in calendarEvents`);
+                }
+              } catch(e) { console.error(`LSE ${ticker}:`, e.message); }
+              await sleep(800);
             }
             return results;
           }
@@ -158,13 +186,18 @@ jobs:
               await sleep(1200);
             }
 
+            const lseTickers = openHoldings.filter(h => h.exchange==='LSE').map(h => h.ticker);
+
             console.log('Fetching HK dividends from aastocks...');
             const hkDivs = await fetchHKDividends(hkTickers);
 
             console.log('Fetching SGX dividends from dividends.sg...');
             const sgxDivs = await fetchSGXDividends(sgxTickers);
 
-            const allDivs = { ...hkDivs, ...sgxDivs };
+            console.log('Fetching LSE dividend dates from Yahoo calendarEvents...');
+            const lseDivs = await fetchLSEDividends(lseTickers);
+
+            const allDivs = { ...hkDivs, ...sgxDivs, ...lseDivs };
             Object.entries(allDivs).forEach(([ticker, info]) => {
               liveExDates[ticker] = info.exDate;
               if (!liveExInfo[ticker]) liveExInfo[ticker] = { exDate:info.exDate, amtPerShare:0, currency: hkDivs[ticker]?'HKD':'SGD' };
@@ -183,7 +216,7 @@ jobs:
             const priceData = { livePrices, liveExDates, liveExInfo, pendingDividends, ts:Date.now(), updatedAt:new Date().toISOString() };
             console.log('Writing to Firebase...');
             await firebasePut('prices.json', priceData);
-            console.log(`Done: ${Object.keys(livePrices).length} prices, ${Object.keys(hkDivs).length} HK divs, ${Object.keys(sgxDivs).length} SGX divs`);
+            console.log(`Done: ${Object.keys(livePrices).length} prices, ${Object.keys(hkDivs).length} HK divs, ${Object.keys(sgxDivs).length} SGX divs, ${Object.keys(lseDivs).length} LSE divs`);
           }
 
           main().catch(e => { console.error('Fatal:', e); process.exit(1); });

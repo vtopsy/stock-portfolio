@@ -525,9 +525,9 @@ input[type=file]{display:none}
     <input type="hidden" id="editCashIdx"/>
     <div class="fr">
       <div class="fg"><label>Type</label>
-        <select id="ecType" onchange="document.getElementById('ecPayDateRow').style.display=this.value==='DIVIDEND'?'block':'none'"><option>DEPOSIT</option><option>WITHDRAWAL</option><option>EXCHANGE</option><option>DIVIDEND</option><option>BUY</option><option>SELL</option></select>
+        <select id="ecType" onchange="var isDiv=this.value==='DIVIDEND';document.getElementById('ecPayDateRow').style.display=isDiv?'block':'none';document.getElementById('ecDateLabel').textContent=isDiv?'Ex-Date':'Date';"><option>DEPOSIT</option><option>WITHDRAWAL</option><option>EXCHANGE</option><option>DIVIDEND</option><option>BUY</option><option>SELL</option></select>
       </div>
-      <div class="fg"><label>Date</label><input id="ecDate" type="date"/></div>
+      <div class="fg"><label id="ecDateLabel">Date</label><input id="ecDate" type="date"/></div>
     </div>
     <div class="fr">
       <div class="fg"><label>Currency</label><select id="ecCurrency"><option>SGD</option><option>USD</option><option>HKD</option><option>GBP</option><option>EUR</option><option>JPY</option></select></div>
@@ -1318,7 +1318,7 @@ function editCashTxOpen(idx){
   const ct=cashTxList[idx];if(!ct)return;
   document.getElementById('editCashIdx').value=idx;
   document.getElementById('ecType').value=ct.type||'DEPOSIT';
-  document.getElementById('ecDate').value=ct.date||'';
+  // ecDate set below based on type
   document.getElementById('ecCurrency').value=ct.currency||'SGD';
   document.getElementById('ecAmount').value=ct.amount||'';
   document.getElementById('ecSymbol').value=ct.symbol||'';
@@ -1327,7 +1327,10 @@ function editCashTxOpen(idx){
   document.getElementById('ecDetails').value=ct.details||ct.notes||'';
   const isDiv=(ct.type||'').toUpperCase()==='DIVIDEND';
   document.getElementById('ecPayDateRow').style.display=isDiv?'block':'none';
-  document.getElementById('ecPayDate').value=ct.payDate||'';
+  document.getElementById('ecDateLabel').textContent=isDiv?'Ex-Date':'Date';
+  // For DIVIDEND: Date field = exDate, Payment Date field = payDate
+  document.getElementById('ecDate').value=isDiv?(ct.exDate||ct.date||''):(ct.date||'');
+  document.getElementById('ecPayDate').value=isDiv?(ct.payDate||ct.date||''):'';
   openModal('editCashTxModal');
 }
 function saveEditCashTx(){

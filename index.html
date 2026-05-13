@@ -642,7 +642,9 @@ function annualDivUSD(ticker){
 
 // Manual dividend per-share override — lets user correct inaccurate Yahoo data.
 // Stored in localStorage as piq_divOverrides so it survives page refresh.
-function setDivOverride(ticker, currency){
+function setDivOverride(btn){
+  const ticker=btn.dataset.ticker;
+  const currency=btn.dataset.currency;
   const current=(divOverrides[ticker]||{}).perShare||'';
   const val=prompt('Override dividend per share for '+ticker+' ('+currency+'):\n(Leave blank to clear override, current: '+(current?current:'Yahoo data')+')', current);
   if(val===null)return; // cancelled
@@ -948,7 +950,7 @@ function renderUpcomingDivs(){
         :'<span style="background:var(--bg3);color:var(--text3);font-size:9px;padding:1px 5px;border-radius:3px;margin-left:6px">XD</span>';
       const payStr=d.payDate?('<div style="font-size:11px;color:var(--amber)">Pay: '+d.payDate+'</div>'):'<div style="font-size:11px;color:var(--text3)">Pay: --</div>';
       const overrideBadge=d.isOverridden?'<span style="font-size:9px;background:var(--amber);color:#000;border-radius:3px;padding:1px 4px;margin-left:4px">manual</span>':'';
-      const editBtn='<button onclick="setDivOverride(''+d.ticker+'',''+d.currency+'')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:2px 4px;margin-left:4px" title="Override dividend per share">✎</button>';
+      const editBtn='<button onclick="setDivOverride(this)" data-ticker="'+d.ticker+'" data-currency="'+d.currency+'" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:2px 4px;margin-left:4px" title="Override dividend per share">✎</button>';
       return '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">'
         +'<div style="flex:1"><b>'+d.ticker+'</b>'+label
         +'<span style="color:var(--text);font-size:13px;margin-left:6px">'+d.name+'</span></div>'

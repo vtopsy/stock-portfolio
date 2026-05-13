@@ -1855,7 +1855,10 @@ async function fetchSGXDividendDates(){
           if(allTds[ti]===dateCells[di]){
             // td structure: ...SGDAmount | ExDate | PayDate | Particulars...
             // Sub-amount is 1 cell before ex-date (ti-1)
-            if(ti>=1){subAmt=parseFloat((allTds[ti-1].textContent.trim()).replace(/[^0-9.]/g,''))||0;}
+            if(ti>=1){
+              var rawAmt=(allTds[ti-1].textContent.trim()).replace(/[^0-9.Ee+-]/g,'');
+              subAmt=parseFloat(rawAmt)||0;
+            }
             break;
           }
         }
@@ -2009,28 +2012,23 @@ function deduplicateDividends(){
   });
 
   // Step 3: Sync — ensure every DIVIDEND cash entry has a matching dividends record
-  // Group cash dividends by ticker+date, then compare count against dividends records
-  // This handles same-day multiple dividends (ordinary + special)
   cashTxList.forEach(function(ct){
     if((ct.type||'').toUpperCase()!=='DIVIDEND')return;
     if(!ct.symbol||!ct.date||!ct.amount)return;
-    const amtUSD=toUSD(parseFloat(ct.amount)||0, ct.currency||baseCurrency);
-    // Count existing dividends records for this ticker+date
-    const existingForDate=dividends.filter(function(d){
-      return d.ticker===ct.symbol && d.date===ct.date;
+    const amtUSD=toUSD(Math.abs(parseFloat(ct.amount)||0), ct.currency||baseCurrency);
+    const ctTime=new Date(ct.date).getTime();
+    // Check if a dividends record already exists within 30 days with similar amount (20% tolerance)
+    const alreadyExists=dividends.some(function(d){
+      if(d.ticker!==ct.symbol)return false;
+      const daysDiff=Math.abs(new Date(d.date).getTime()-ctTime)/(1000*60*60*24);
+      return daysDiff<=30&&Math.abs(d.amount-amtUSD)<Math.max(amtUSD*0.2,0.5);
     });
-    // Count cash entries for this ticker+date (to know how many dividend records we need)
-    const cashForDate=cashTxList.filter(function(c){
-      return (c.type||'').toUpperCase()==='DIVIDEND' && c.symbol===ct.symbol && c.date===ct.date;
-    });
-    // Check if this specific amount already has a matching dividends record
-    // Use 20% tolerance to handle FX rate differences
-    const amtMatched=existingForDate.some(function(d){
-      return Math.abs(d.amount-amtUSD)<Math.max(amtUSD*0.2, 0.5);
-    });
-    if(!amtMatched){
+    if(!alreadyExists){
       const key='DIV_'+ct.symbol+'_'+ct.date+'_'+amtUSD.toFixed(4);
-      dividends.push({_key:key,ticker:ct.symbol,name:ct.stockName||ct.symbol,amount:amtUSD,date:ct.date,type:'Dividend'});
+      // Avoid adding duplicate keys
+      if(!dividends.some(function(d){return d._key===key;})){
+        dividends.push({_key:key,ticker:ct.symbol,name:ct.stockName||ct.symbol,amount:amtUSD,date:ct.date,type:'Dividend'});
+      }
     }
   });
 }

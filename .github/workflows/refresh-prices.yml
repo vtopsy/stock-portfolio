@@ -194,8 +194,11 @@ jobs:
             console.log('Fetching SGX dividends from dividends.sg...');
             const sgxDivs = await fetchSGXDividends(sgxTickers);
 
-            console.log('Fetching LSE dividend dates from Yahoo calendarEvents...');
-            const lseDivs = await fetchLSEDividends(lseTickers);
+            // Also fetch US stocks payment dates via calendarEvents
+            const usTickers = openHoldings.filter(h => ['NYSE','NASDAQ','USX'].includes(h.exchange)).map(h => h.ticker);
+            const calTickers = [...lseTickers, ...usTickers];
+            console.log('Fetching LSE+US dividend dates from Yahoo calendarEvents...');
+            const lseDivs = await fetchLSEDividends(calTickers);
 
             const allDivs = { ...hkDivs, ...sgxDivs, ...lseDivs };
             Object.entries(allDivs).forEach(([ticker, info]) => {

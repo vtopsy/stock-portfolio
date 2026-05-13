@@ -571,6 +571,7 @@ const liveExDates={};
 const liveExInfo={};
 let deletedDivKeys=new Set(); // keys blocked from re-adding (ex-date entries user deleted)
 let pendingDividends=[]; // auto dividends waiting for payment date to arrive
+let divOverrides={}; // manual per-share overrides: {ticker:{perShare,currency}} — survives refresh
 
 const FX={USD:1,SGD:1.35,HKD:7.82,GBP:0.79,GBX:79,EUR:0.92,JPY:151.2};
 // Dividend withholding tax rates for auto-added dividends only (CSV imports already net of tax)
@@ -601,6 +602,62 @@ function totalDivReceivedUSD(ticker){
     })
     .reduce(function(s,d){return s+(parseFloat(d.amount)||0);},0);
 }
+
+// Trailing-12-month dividends only — used for CostY% and CurrY% yield calculations.
+// Using all-time dividends (totalDivReceivedUSD) inflates yields for long-held stocks
+// because it accumulates every payment ever received instead of the annual run-rate.
+// If a divOverride is set for a ticker, the upcoming dividend amount uses that instead
+// of whatever Yahoo Finance returned, so yields also reflect the corrected figure.
+function annualDivUSD(ticker){
+  var cutoff=new Date();
+  cutoff.setFullYear(cutoff.getFullYear()-1);
+  var cutoffStr=cutoff.toISOString().split('T')[0];
+  var pastTotal=dividends
+    .filter(function(d){
+      if(d.upcoming||d.date>today())return false; // exclude upcoming/future
+      if(d.date<cutoffStr)return false;            // exclude older than 12 months
+      if(!ticker)return true;
+      return (d.ticker||'').trim().toUpperCase()===(ticker||'').trim().toUpperCase();
+    })
+    .reduce(function(s,d){return s+(parseFloat(d.amount)||0);},0);
+
+  // If there's a manual override, replace the upcoming dividend amount in yield calc
+  if(ticker&&divOverrides[ticker]){
+    var h=openH().find(function(x){return x.ticker===ticker;});
+    if(h){
+      var override=divOverrides[ticker];
+      var taxRate=getDivTaxRate(ticker,h.exchange);
+      var grossOrig=override.perShare*h.shares;
+      var netOrig=grossOrig*(1-taxRate);
+      var netUSD=toUSD(netOrig, h.currency||'USD');
+      // Add override upcoming dividend to trailing total (replacing any upcoming entry)
+      var upcomingInDividends=dividends.filter(function(d){
+        return d.upcoming&&(d.ticker||'').trim().toUpperCase()===ticker.trim().toUpperCase();
+      }).reduce(function(s,d){return s+(parseFloat(d.amount)||0);},0);
+      return pastTotal - upcomingInDividends + netUSD;
+    }
+  }
+  return pastTotal;
+}
+
+// Manual dividend per-share override — lets user correct inaccurate Yahoo data.
+// Stored in localStorage as piq_divOverrides so it survives page refresh.
+function setDivOverride(ticker, currency){
+  const current=(divOverrides[ticker]||{}).perShare||'';
+  const val=prompt('Override dividend per share for '+ticker+' ('+currency+'):\n(Leave blank to clear override, current: '+(current?current:'Yahoo data')+')', current);
+  if(val===null)return; // cancelled
+  if(val.trim()===''){
+    delete divOverrides[ticker];
+  } else {
+    const n=parseFloat(val);
+    if(isNaN(n)||n<=0){alert('Invalid amount');return;}
+    divOverrides[ticker]={perShare:n, currency:currency};
+  }
+  try{localStorage.setItem('piq_divOverrides',JSON.stringify(divOverrides));}catch(e){}
+  renderUpcomingDivs();
+  renderHoldings();
+}
+
 
 // ===================== HOLDINGS =====================
 function buildHoldings(){
@@ -869,15 +926,19 @@ function renderUpcomingDivs(){
     // Get estimated amount from most recent dividend record for this ticker
     const origCur=h.currency||baseCurrency;
     const exInfo=liveExInfo[h.ticker];
-    const grossAmt=exInfo?(exInfo.amtPerShare*(exInfo.shares||h.shares)):null;
+    // Use manual override per-share if set, otherwise fall back to Yahoo data
+    const override=divOverrides[h.ticker];
+    const effectivePerShare=override?override.perShare:(exInfo?exInfo.amtPerShare:null);
+    const grossAmt=effectivePerShare!==null&&effectivePerShare!==undefined?effectivePerShare*(exInfo&&exInfo.shares?exInfo.shares:h.shares):null;
     // Apply withholding tax for display in upcoming dividends
     const taxRate=getDivTaxRate(h.ticker,h.exchange);
     const totalAmt=grossAmt!==null?grossAmt*(1-taxRate):null;
+    const isOverridden=!!override;
     const dispAmt=totalAmt!==null?(origCur+' '+totalAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})):'--';
     const isToday=exDate===todayStr;
     const isFuture=exDate>todayStr;
     // resolvedPayDate already computed above
-    items.push({ticker:h.ticker,name:h.name,exDate:exDate,dispAmt:dispAmt,isToday:isToday,isFuture:isFuture,exTime:exTime,payDate:resolvedPayDate});
+    items.push({ticker:h.ticker,name:h.name,exDate:exDate,dispAmt:dispAmt,isToday:isToday,isFuture:isFuture,exTime:exTime,payDate:resolvedPayDate,currency:origCur,isOverridden:isOverridden});
   });
   items.sort(function(a,b){return a.exTime-b.exTime;});
   const html=items.length
@@ -886,11 +947,13 @@ function renderUpcomingDivs(){
         :d.isFuture?'<span style="background:var(--bg3);color:var(--text3);font-size:9px;padding:1px 5px;border-radius:3px;margin-left:6px">UPCOMING</span>'
         :'<span style="background:var(--bg3);color:var(--text3);font-size:9px;padding:1px 5px;border-radius:3px;margin-left:6px">XD</span>';
       const payStr=d.payDate?('<div style="font-size:11px;color:var(--amber)">Pay: '+d.payDate+'</div>'):'<div style="font-size:11px;color:var(--text3)">Pay: --</div>';
+      const overrideBadge=d.isOverridden?'<span style="font-size:9px;background:var(--amber);color:#000;border-radius:3px;padding:1px 4px;margin-left:4px">manual</span>':'';
+      const editBtn='<button onclick="setDivOverride(''+d.ticker+'',''+d.currency+'')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:2px 4px;margin-left:4px" title="Override dividend per share">✎</button>';
       return '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">'
         +'<div style="flex:1"><b>'+d.ticker+'</b>'+label
         +'<span style="color:var(--text);font-size:13px;margin-left:6px">'+d.name+'</span></div>'
         +'<div style="text-align:right">'
-        +'<div style="color:var(--green);font-weight:600">'+d.dispAmt+'</div>'
+        +'<div style="color:var(--green);font-weight:600">'+d.dispAmt+overrideBadge+editBtn+'</div>'
         +'<div style="font-size:11px;color:var(--text3)">Ex: '+d.exDate+'</div>'
         +payStr
         +'</div></div>';
@@ -922,13 +985,15 @@ function renderHoldings(){
     var costOrig=h.totalCostUSD*hFx;
     var mvOrig=h.mv*hFx;
     var pnlOrig=h.pnl*hFx;
-    // CostY% and CurrY% still use base currency ratios (div received / cost or mv)
+    // CostY% and CurrY% use trailing-12-month dividends for accurate annualised yield.
+    // Using all-time dividends inflates yield for long-held positions.
+    var annDivUSD=annualDivUSD(h.ticker);
     var costBase=toBase(h.totalCostUSD);
     var mvBase=toBase(h.mv);
-    var totalDivBase=toBase(totalDivUSD);
+    var annDivBase=toBase(annDivUSD);
     // Treat near-zero cost (floating point rounding) as zero to avoid huge percentages
-    var costY=(costBase>0.01)?(totalDivBase/costBase*100).toFixed(2):'0.00';
-    var currY=(mvBase>0.01)?(totalDivBase/mvBase*100).toFixed(2):'0.00';
+    var costY=(costBase>0.01)?(annDivBase/costBase*100).toFixed(2):'0.00';
+    var currY=(mvBase>0.01)?(annDivBase/mvBase*100).toFixed(2):'0.00';
     var plDivOrig=pnlOrig+totalDivOrig;
     var plDivPct=costOrig>0?(plDivOrig/costOrig*100):0;
     var plDivColor=plDivOrig>=0?'var(--green)':'var(--red)';
@@ -1876,6 +1941,7 @@ document.querySelectorAll('.modal-bg').forEach(function(m){m.addEventListener('c
 try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){document.getElementById('fbApiKey').value=fb.apiKey||'';document.getElementById('fbDbUrl').value=fb.databaseURL||'';firebaseConfig=fb;}}catch(e){}
 try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
+try{const ov=localStorage.getItem('piq_divOverrides');if(ov){const parsed=JSON.parse(ov);if(parsed&&typeof parsed==='object')Object.assign(divOverrides,parsed);}}catch(e){}
 try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<72){Object.assign(livePrices,lp.prices);if(lp.exDates)Object.assign(liveExDates,lp.exDates);if(lp.exInfo)Object.assign(liveExInfo,lp.exInfo);if(lp.ts)setTimeout(function(){updateLastRefreshedLabel(lp.ts);},100);if(lp.deletedKeys)lp.deletedKeys.forEach(function(k){deletedDivKeys.add(k);});if(lp.pendingDividends){pendingDividends=lp.pendingDividends;pendingDividends.forEach(function(p){if(p.exDate)liveExDates[p.ticker]=p.exDate;});}document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
 async function fetchSGXDividendDates(){
   // Fetch ex-date and payment date from dividends.sg for all SGX open holdings

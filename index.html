@@ -619,6 +619,11 @@ function buildHoldings(){
     }
     if(livePrices[k])map[k].price=livePrices[k];
   });
+  // Clean up floating point rounding errors
+  Object.values(map).forEach(function(h){
+    if(Math.abs(h.totalCostUSD)<0.01)h.totalCostUSD=0;
+    if(Math.abs(h.shares)<0.0001)h.shares=0;
+  });
   return Object.values(map);
 }
 const calcH=h=>{const avg=h.shares>0?h.totalCostUSD/h.shares:0;const mv=h.shares*(h.price||avg);const pnl=mv-h.totalCostUSD;const pct=h.totalCostUSD>0?pnl/h.totalCostUSD*100:0;return{...h,avg,mv,pnl,pct,annDiv:mv*(h.divYield||0)/100};};
@@ -899,8 +904,9 @@ function renderHoldings(){
     var costBase=toBase(h.totalCostUSD);
     var mvBase=toBase(h.mv);
     var totalDivBase=toBase(totalDivUSD);
-    var costY=costBase>0?(totalDivBase/costBase*100).toFixed(2):'0.00';
-    var currY=mvBase>0?(totalDivBase/mvBase*100).toFixed(2):'0.00';
+    // Treat near-zero cost (floating point rounding) as zero to avoid huge percentages
+    var costY=(costBase>0.01)?(totalDivBase/costBase*100).toFixed(2):'0.00';
+    var currY=(mvBase>0.01)?(totalDivBase/mvBase*100).toFixed(2):'0.00';
     var plDivOrig=pnlOrig+totalDivOrig;
     var plDivPct=costOrig>0?(plDivOrig/costOrig*100):0;
     var plDivColor=plDivOrig>=0?'var(--green)':'var(--red)';
@@ -1461,7 +1467,20 @@ async function refreshPrices(){
           }
           // Also check meta fields as fallback (works for US stocks)
           if(meta.exDividendDate){liveExDates[ticker]=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];}
-          if(h&&meta.dividendDate&&meta.exDividendDate){const exDate=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];const payDate=new Date(meta.dividendDate*1000).toISOString().split('T')[0];if(parseInt(payDate.slice(0,4))>=new Date().getFullYear()-1){const cnt=applyPaymentDate(ticker,exDate,payDate);if(cnt>0)divAdded+=cnt;}}
+          if(h&&meta.dividendDate&&meta.exDividendDate){
+            const exDate=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];
+            const payDate=new Date(meta.dividendDate*1000).toISOString().split('T')[0];
+            if(parseInt(payDate.slice(0,4))>=new Date().getFullYear()-1){
+              const cnt=applyPaymentDate(ticker,exDate,payDate);
+              if(cnt>0)divAdded+=cnt;
+              // Also store in pendingDividends so upcoming div shows correct pay date
+              const existIdx=pendingDividends.findIndex(function(p){return p.ticker===ticker&&p.exDate===exDate;});
+              const entry={ticker:ticker,exDate:exDate,payDate:payDate,name:h.name||ticker};
+              if(existIdx>=0)Object.assign(pendingDividends[existIdx],entry);
+              else pendingDividends.push(entry);
+              liveExDates[ticker]=exDate;
+            }
+          }
 
           // ── Process dividend events ──
           const divEvents=result.events&&result.events.dividends;

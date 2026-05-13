@@ -168,10 +168,8 @@ input[type=file]{display:none}
     </div>
     <div class="card">
       <div class="card-header"><span class="card-title">Allocation by Country</span></div>
-      <div style="display:flex;gap:12px;align-items:center">
-        <div style="position:relative;width:170px;height:170px;flex-shrink:0"><canvas id="allocChart"></canvas></div>
-        <div id="allocLegend" style="flex:1;display:flex;flex-direction:column;gap:6px"></div>
-      </div>
+      <canvas id="allocChart" style="display:none"></canvas>
+      <div id="allocLegend" style="display:flex;flex-direction:column;gap:10px;padding:4px 0"></div>
     </div>
   </div>
   <div class="card">
@@ -679,7 +677,18 @@ function updateAllocChart(){
   const labels=Object.keys(geo),vals=labels.map(k=>geo[k]),colors=labels.map(k=>cols[k]||'#9ba3c0');
   allocChart.data.labels=labels;allocChart.data.datasets[0].data=vals;allocChart.data.datasets[0].backgroundColor=colors;allocChart.update();
   const totMV=totalMV();
-  document.getElementById('allocLegend').innerHTML=labels.length?labels.map((l,i)=>'<div style="display:flex;align-items:center;gap:7px;font-size:13px"><div class="alloc-dot" style="background:'+colors[i]+'"></div><span style="color:var(--text2);flex:1">'+l+'</span><span style="color:var(--text3);font-size:11px">'+fmt(vals[i])+'</span><span style="font-weight:700;min-width:38px;text-align:right">'+(totMV>0?(vals[i]/totMV*100).toFixed(1):0)+'%</span></div>').join(''):'<div style="color:var(--text3)">No holdings</div>';
+  document.getElementById('allocLegend').innerHTML=labels.length?labels.map((l,i)=>{
+    const pct=totMV>0?(vals[i]/totMV*100):0;
+    return '<div>'
+      +'<div style="display:flex;justify-content:space-between;margin-bottom:4px">'
+      +'<span style="color:var(--text);font-size:13px;font-weight:600">'+l+'</span>'
+      +'<span style="color:var(--text);font-size:13px;font-weight:700">'+pct.toFixed(0)+'%</span>'
+      +'</div>'
+      +'<div style="background:var(--bg3);border-radius:3px;height:6px;width:100%">'
+      +'<div style="background:'+colors[i]+';width:'+pct.toFixed(1)+'%;height:100%;border-radius:3px;transition:width 0.4s ease"></div>'
+      +'</div>'
+      +'</div>';
+  }).join(''):'<div style="color:var(--text3)">No holdings</div>';
 }
 
 function updatePLChart(){
@@ -1544,11 +1553,15 @@ async function refreshPrices(){
               const netOrig=parseFloat((totalOrig*(1-taxRate)).toFixed(2));
               const netUSD=totalUSD*(1-taxRate);
               const taxNote=taxRate>0?' (net of '+(taxRate*100)+'% withholding tax)':'';
-              // Add to dividends list (upcoming entries marked as upcoming:true, no cash entry yet)
-              dividends.push({_key:divKey,ticker:ticker,name:hName,amount:netUSD,date:evDate,exDate:evDate,type:'Dividend',auto:true,upcoming:isFuture,taxRate:taxRate});
-              if(!isFuture){
-                // Past/today: also add cash entry
-                cashTxList.push({_key:divKey,type:'DIVIDEND',date:evDate,currency:hCur,amount:netOrig,details:'Dividend: '+amtPerShare.toFixed(4)+' per share × '+h.shares+' shares'+taxNote,symbol:ticker,stockName:hName,portfolio:h.exchange});
+              // Get payment date from pendingDividends if available
+              const pendingEntry=pendingDividends.find(function(p){return p.ticker===ticker&&Math.abs(new Date(p.exDate).getTime()-new Date(evDate).getTime())<7*86400000;});
+              const payDateForEntry=pendingEntry&&pendingEntry.payDate?pendingEntry.payDate:evDate;
+              const payDatePassed=payDateForEntry<=todayStr;
+              // Add to dividends with payment date if known, otherwise ex-date
+              dividends.push({_key:divKey,ticker:ticker,name:hName,amount:netUSD,date:payDateForEntry,exDate:evDate,payDate:payDateForEntry!==evDate?payDateForEntry:undefined,type:'Dividend',auto:true,upcoming:!payDatePassed,taxRate:taxRate});
+              if(payDatePassed){
+                // Payment date has passed — add cash entry with payment date
+                cashTxList.push({_key:divKey,type:'DIVIDEND',date:payDateForEntry,currency:hCur,amount:netOrig,details:'Dividend: '+amtPerShare.toFixed(4)+' per share × '+h.shares+' shares'+taxNote,symbol:ticker,stockName:hName,portfolio:h.exchange});
               }
               divAdded++;
             });

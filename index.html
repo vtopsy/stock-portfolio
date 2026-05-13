@@ -577,6 +577,18 @@ let deletedDivKeys=new Set(); // keys blocked from re-adding (ex-date entries us
 let pendingDividends=[]; // auto dividends waiting for payment date to arrive
 
 const FX={USD:1,SGD:1.35,HKD:7.82,GBP:0.79,GBX:79,EUR:0.92,JPY:151.2};
+// Dividend withholding tax rates for auto-added dividends only (CSV imports already net of tax)
+// Chinese-incorporated HK stocks: 10% withholding tax
+const CHINA_HK_TICKERS=new Set(['0857.HK','1398.HK','0939.HK','2318.HK','0300.HK','3690.HK','0388.HK','0941.HK','1288.HK','2628.HK','0762.HK','0883.HK','0386.HK','0688.HK','1088.HK','0168.HK','0175.HK','0267.HK','0728.HK','0857.HK','0992.HK','1800.HK','1928.HK','2007.HK','2020.HK','2282.HK','2319.HK','2331.HK','2333.HK','3968.HK','6030.HK','6618.HK','9618.HK','9888.HK','9999.HK']);
+// HK-incorporated stocks exempt from mainland withholding tax (add more as needed)
+const HK_INCORPORATED=new Set(['1038.HK','0001.HK','0002.HK','0003.HK','0004.HK','0006.HK','0011.HK','0012.HK','0016.HK','0017.HK','0019.HK','0023.HK','0066.HK','0083.HK','0101.HK','0151.HK','0291.HK','0316.HK','0330.HK','0494.HK','0669.HK','0823.HK','0836.HK','0960.HK','1109.HK','1113.HK','1177.HK','1299.HK','1876.HK','2388.HK','2388.HK','2888.HK','3328.HK','0005.HK','0066.HK','1883.HK','1373.HK']);
+function getDivTaxRate(ticker, exchange){
+  // US stocks: 30% withholding for non-US residents
+  if(exchange==='NYSE'||exchange==='NASDAQ'||exchange==='USX') return 0.30;
+  // Chinese-incorporated HK stocks: 10% withholding
+  if(exchange==='HKEX'&&CHINA_HK_TICKERS.has(ticker)&&!HK_INCORPORATED.has(ticker)) return 0.10;
+  return 0; // SGX, LSE, others: no automatic withholding
+}
 const toUSD=(a,c)=>a/(FX[c]||1);
 const toBase=u=>u*(FX[baseCurrency]||1);
 const fmt=u=>baseCurrency+' '+toBase(u).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -850,8 +862,11 @@ function renderUpcomingDivs(){
     // Get estimated amount from most recent dividend record for this ticker
     const origCur=h.currency||baseCurrency;
     const exInfo=liveExInfo[h.ticker];
-    const totalAmt=exInfo?(exInfo.amtPerShare*(exInfo.shares||h.shares)):null;
-    const dispAmt=totalAmt?(origCur+' '+totalAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})):'--';
+    const grossAmt=exInfo?(exInfo.amtPerShare*(exInfo.shares||h.shares)):null;
+    // Apply withholding tax for display in upcoming dividends
+    const taxRate=getDivTaxRate(h.ticker,h.exchange);
+    const totalAmt=grossAmt!==null?grossAmt*(1-taxRate):null;
+    const dispAmt=totalAmt!==null?(origCur+' '+totalAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})):'--';
     const isToday=exDate===todayStr;
     const isFuture=exDate>todayStr;
     // resolvedPayDate already computed above
@@ -863,7 +878,7 @@ function renderUpcomingDivs(){
       const label=d.isToday?'<span style="background:var(--amber);color:#000;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:6px">XD TODAY</span>'
         :d.isFuture?'<span style="background:var(--bg3);color:var(--text3);font-size:9px;padding:1px 5px;border-radius:3px;margin-left:6px">UPCOMING</span>'
         :'<span style="background:var(--bg3);color:var(--text3);font-size:9px;padding:1px 5px;border-radius:3px;margin-left:6px">XD</span>';
-      const payStr=d.payDate?('<div style="font-size:11px;color:var(--text3)">Pay: '+d.payDate+'</div>'):'<div style="font-size:11px;color:var(--text3)">Pay: --</div>';
+      const payStr=d.payDate?('<div style="font-size:11px;color:var(--amber)">Pay: '+d.payDate+'</div>'):'<div style="font-size:11px;color:var(--text3)">Pay: --</div>';
       return '<div style="display:flex;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">'
         +'<div style="flex:1"><b>'+d.ticker+'</b>'+label
         +'<span style="color:var(--text);font-size:13px;margin-left:6px">'+d.name+'</span></div>'
@@ -1524,12 +1539,16 @@ async function refreshPrices(){
                 });
                 if(hasDivNearby)return;
               }
+              // Apply dividend withholding tax for auto-added entries
+              const taxRate=getDivTaxRate(ticker,h.exchange);
+              const netOrig=parseFloat((totalOrig*(1-taxRate)).toFixed(2));
+              const netUSD=totalUSD*(1-taxRate);
+              const taxNote=taxRate>0?' (net of '+(taxRate*100)+'% withholding tax)':'';
               // Add to dividends list (upcoming entries marked as upcoming:true, no cash entry yet)
-              dividends.push({_key:divKey,ticker:ticker,name:hName,amount:totalUSD,date:evDate,exDate:evDate,type:'Dividend',auto:true,upcoming:isFuture});
+              dividends.push({_key:divKey,ticker:ticker,name:hName,amount:netUSD,date:evDate,exDate:evDate,type:'Dividend',auto:true,upcoming:isFuture,taxRate:taxRate});
               if(!isFuture){
                 // Past/today: also add cash entry
-                const cashAmt=parseFloat(totalOrig.toFixed(2));
-                cashTxList.push({_key:divKey,type:'DIVIDEND',date:evDate,currency:hCur,amount:cashAmt,details:'Dividend: '+amtPerShare.toFixed(4)+' per share × '+h.shares+' shares',symbol:ticker,stockName:hName,portfolio:h.exchange});
+                cashTxList.push({_key:divKey,type:'DIVIDEND',date:evDate,currency:hCur,amount:netOrig,details:'Dividend: '+amtPerShare.toFixed(4)+' per share × '+h.shares+' shares'+taxNote,symbol:ticker,stockName:hName,portfolio:h.exchange});
               }
               divAdded++;
             });
@@ -1555,9 +1574,13 @@ async function refreshPrices(){
     const alreadyDiv=dividends.some(function(d){return d.ticker===p.ticker&&d.date===p.payDate;});
     const alreadyCash=cashTxList.some(function(ct){return ct.symbol===p.ticker&&ct.date===p.payDate&&(ct.type||'').toUpperCase()==='DIVIDEND';});
     if(!alreadyDiv&&!alreadyCash){
-      const newKey='DIV_'+p.ticker+'_'+p.payDate+'_'+p.amtUSD.toFixed(4);
-      dividends.push({_key:newKey,ticker:p.ticker,name:p.name,amount:p.amtUSD,date:p.payDate,exDate:p.exDate,type:'Dividend',auto:true});
-      cashTxList.push({_key:newKey,type:'DIVIDEND',date:p.payDate,currency:p.currency,amount:p.amount,details:p.shares+' (ex-date: '+p.exDate+')',symbol:p.ticker,stockName:p.name,portfolio:p.portfolio});
+      const pTaxRate=p.taxRate||getDivTaxRate(p.ticker,p.exchange||((openH().find(function(h){return h.ticker===p.ticker;})||{}).exchange||''));
+      const pNetAmt=parseFloat(((p.amount||0)*(1-pTaxRate)).toFixed(2));
+      const pNetUSD=(p.amtUSD||0)*(1-pTaxRate);
+      const pTaxNote=pTaxRate>0?' (net of '+(pTaxRate*100)+'% withholding tax)':'';
+      const newKey='DIV_'+p.ticker+'_'+p.payDate+'_'+pNetUSD.toFixed(4);
+      dividends.push({_key:newKey,ticker:p.ticker,name:p.name,amount:pNetUSD,date:p.payDate,exDate:p.exDate,type:'Dividend',auto:true,taxRate:pTaxRate});
+      cashTxList.push({_key:newKey,type:'DIVIDEND',date:p.payDate,currency:p.currency,amount:pNetAmt,details:(p.shares||'Dividend')+' (ex-date: '+p.exDate+')'+pTaxNote,symbol:p.ticker,stockName:p.name,portfolio:p.portfolio});
       divAdded++;
     }
     return false; // remove from pending

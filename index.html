@@ -1514,7 +1514,7 @@ function saveEditCashTx(){
     const entry={ticker:ticker,exDate:ecExDate,payDate:ecPayDate,name:document.getElementById('ecStockName').value};
     if(existing>=0)pendingDividends[existing]=Object.assign(pendingDividends[existing],entry);
     else pendingDividends.push(entry);
-    try{const ts=Date.now();localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:ts}));updateLastRefreshedLabel(ts);}catch(e){}
+    try{const ts=Date.now();localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,nextExDates:liveNextExDate,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:ts}));updateLastRefreshedLabel(ts);}catch(e){}
   }
   closeModal('editCashTxModal');renderCash();renderMetrics();renderUpcomingDivs();renderDivHistory();renderDivYearlyTable();saveToFirebase();showToast('Cash transaction updated');
 }
@@ -1550,7 +1550,7 @@ function delCashTx(idx){
           exchange:((openH().find(function(h){return h.ticker===ct.symbol;})||{}).exchange||'')});
       }
     }
-    try{const ts=Date.now();localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:ts}));updateLastRefreshedLabel(ts);}catch(e){}
+    try{const ts=Date.now();localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,nextExDates:liveNextExDate,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:ts}));updateLastRefreshedLabel(ts);}catch(e){}
   }
   renderCash();renderMetrics();updateDivChart();renderDivHistory();renderDivYearlyTable();saveToFirebase();showToast('Deleted');
 }
@@ -1732,7 +1732,7 @@ async function refreshPrices(){
   if(divAdded>0){saveToFirebase();}
   document.getElementById('syncStatus').textContent=n?'Live ('+n+')':'Local';
   document.getElementById('yhStatus').textContent=(n?'Updated '+n+' prices':'No prices returned')+( divAdded?' · '+divAdded+' dividends added':'');
-  try{const ts=Date.now();localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:ts}));updateLastRefreshedLabel(ts);}catch(e){}
+  try{const ts=Date.now();localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,nextExDates:liveNextExDate,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:ts}));updateLastRefreshedLabel(ts);}catch(e){}
   // Re-render holdings now that liveExDates is populated (for XD badges)
   renderHoldings();
   // Fetch accurate ex-date and payment dates from dividends.sg for SGX stocks
@@ -2037,7 +2037,7 @@ try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){docu
 try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
 try{const ov=localStorage.getItem('piq_divOverrides');if(ov){const parsed=JSON.parse(ov);if(parsed&&typeof parsed==='object')Object.assign(divOverrides,parsed);}}catch(e){}
-try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<72){Object.assign(livePrices,lp.prices);if(lp.exDates)Object.assign(liveExDates,lp.exDates);if(lp.exInfo)Object.assign(liveExInfo,lp.exInfo);if(lp.ts)setTimeout(function(){updateLastRefreshedLabel(lp.ts);},100);if(lp.deletedKeys)lp.deletedKeys.forEach(function(k){deletedDivKeys.add(k);});if(lp.pendingDividends){pendingDividends=lp.pendingDividends;pendingDividends.forEach(function(p){if(p.exDate)liveExDates[p.ticker]=p.exDate;});}document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
+try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<72){Object.assign(livePrices,lp.prices);if(lp.exDates)Object.assign(liveExDates,lp.exDates);if(lp.exInfo)Object.assign(liveExInfo,lp.exInfo);if(lp.nextExDates)Object.assign(liveNextExDate,lp.nextExDates);if(lp.ts)setTimeout(function(){updateLastRefreshedLabel(lp.ts);},100);if(lp.deletedKeys)lp.deletedKeys.forEach(function(k){deletedDivKeys.add(k);});if(lp.pendingDividends){pendingDividends=lp.pendingDividends;pendingDividends.forEach(function(p){if(p.exDate)liveExDates[p.ticker]=p.exDate;});}document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
 async function fetchSGXDividendDates(){
   // Fetch ex-date and payment date from dividends.sg for all SGX open holdings
   const sgxHoldings=openH().filter(function(h){return h.exchange==='SGX';});
@@ -2104,7 +2104,7 @@ async function fetchSGXDividendDates(){
     await new Promise(function(r){setTimeout(r,500);});
   }
   if(updated>0||sgxHoldings.length>0){
-    try{const ts=Date.now();localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:ts}));updateLastRefreshedLabel(ts);}catch(e){}
+    try{const ts=Date.now();localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,nextExDates:liveNextExDate,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:ts}));updateLastRefreshedLabel(ts);}catch(e){}
     if(updated>0){saveToFirebase();}
     renderHoldings();renderUpcomingDivs();
     if(updated>0)showToast(updated+' SGX dividend pay dates updated from dividends.sg');
@@ -2135,7 +2135,7 @@ async function loadFirebasePrices(){
       });
     }
     // Update localStorage cache
-    try{const ts=data.ts||Date.now();localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:ts}));updateLastRefreshedLabel(ts);}catch(e){}
+    try{const ts=data.ts||Date.now();localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,nextExDates:liveNextExDate,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:ts}));updateLastRefreshedLabel(ts);}catch(e){}
     renderHoldings();renderUpcomingDivs();
     document.getElementById('syncStatus').textContent='Live (server)';
     console.log('Loaded server prices from Firebase, updated at',data.updatedAt);

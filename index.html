@@ -573,7 +573,7 @@ let deletedDivKeys=new Set(); // keys blocked from re-adding (ex-date entries us
 let pendingDividends=[]; // auto dividends waiting for payment date to arrive
 let divOverrides={}; // manual per-share overrides: {ticker:{perShare,currency}} — survives refresh
 
-const FX={USD:1,SGD:1.35,HKD:7.82,GBP:0.79,GBX:79,EUR:0.92,JPY:151.2};
+let FX={USD:1,SGD:1.35,HKD:7.82,GBP:0.79,GBX:79,EUR:0.92,JPY:151.2}; // updated by fetchLiveFX()
 // Dividend withholding tax rates for auto-added dividends only (CSV imports already net of tax)
 // Chinese-incorporated HK stocks: 10% withholding tax
 const CHINA_HK_TICKERS=new Set(['0857.HK','1398.HK','0939.HK','2318.HK','0300.HK','3690.HK','0388.HK','0941.HK','1288.HK','2628.HK','0762.HK','0883.HK','0386.HK','0688.HK','1088.HK','0168.HK','0175.HK','0267.HK','0728.HK','0857.HK','0992.HK','1800.HK','1928.HK','2007.HK','2020.HK','2282.HK','2319.HK','2331.HK','2333.HK','3968.HK','6030.HK','6618.HK','9618.HK','9888.HK','9999.HK']);
@@ -923,7 +923,17 @@ function renderHoldingsSummaryTable(){
     const cpnl=closedPnl[cur]||{pnl:0,cost:0};
     const overall=openPnlDiv+cpnl.pnl;
     const overallCost=d.cost+cpnl.cost;
-    return '<tr><td style="font-weight:600">'+cur+'</td><td>'+baseCurrency+' '+mvBase.toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1})+' <span style="color:var(--text3)">('+portPct+'%)</span></td><td>'+fmtPnl(openPnlDiv,d.cost)+'</td><td>'+fmtPnl(cpnl.pnl,cpnl.cost)+'</td><td>'+fmtPnl(overall,overallCost)+'</td></tr>';
+    // Show values in native currency (USD amounts * FX rate for that currency)
+    const fxRate=FX[cur]||1;
+    function fmtNative(usdVal,usdCost){
+      const nativeVal=usdVal*fxRate;
+      const sign=nativeVal>=0?'+':'';
+      const pct=usdCost>0?(usdVal/usdCost*100).toFixed(2):'0.00';
+      const color=nativeVal>=0?'var(--green)':'var(--red)';
+      return '<span style="color:'+color+';font-weight:600">'+sign+cur+' '+Math.abs(nativeVal).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' ('+(nativeVal>=0?'+':'')+pct+'%)</span>';
+    }
+    const mvNative=(d.mv*fxRate).toLocaleString(undefined,{minimumFractionDigits:1,maximumFractionDigits:1});
+    return '<tr><td style="font-weight:600">'+cur+'</td><td>'+cur+' '+mvNative+' <span style="color:var(--text3)">('+portPct+'%)</span></td><td>'+fmtNative(openPnlDiv,d.cost)+'</td><td>'+fmtNative(cpnl.pnl,cpnl.cost)+'</td><td>'+fmtNative(overall,overallCost)+'</td></tr>';
   }).join('');
   document.getElementById('holdingsSummaryTable').innerHTML='<table class="tbl"><thead><tr><th>Currency</th><th>Current Value</th><th>Current P&L (+Div)</th><th>Closed P&L (+Div)</th><th>Overall P&L (+Div)</th></tr></thead><tbody>'+rows+'<tr style="border-top:2px solid var(--border);font-weight:700"><td>Total in '+baseCurrency+'</td><td>'+baseCurrency+' '+grandMV.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td><td><span style="color:'+gc(grandOpenPnl)+';font-weight:700">'+gs(grandOpenPnl)+baseCurrency+' '+Math.abs(grandOpenPnl).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' ('+(grandOpenPnl>=0?'+':'')+grandOpenPct+'%)</span></td><td><span style="color:'+gc(grandClosedPnlBase)+';font-weight:700">'+gs(grandClosedPnlBase)+baseCurrency+' '+Math.abs(grandClosedPnlBase).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' ('+(grandClosedPnlBase>=0?'+':'')+grandClosedPct+'%)</span></td><td><span style="color:'+gc(grandOverall)+';font-weight:700">'+gs(grandOverall)+baseCurrency+' '+Math.abs(grandOverall).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+' ('+(grandOverall>=0?'+':'')+grandOverallPct+'%)</span></td></tr></tbody></table>';
 }
@@ -1540,9 +1550,43 @@ function delCashTx(idx){
 function addWatch(){const t=document.getElementById('wTicker').value.toUpperCase().trim();const n=document.getElementById('wName').value.trim();if(!t)return;watchlist.push({ticker:t,name:n||t,price:0,chg:0,pct:0});closeModal('addWatchModal');renderWatchlist();showToast(t+' added');}
 function addAlert(){const t=document.getElementById('alTicker').value.toUpperCase().trim();const cond=document.getElementById('alCond').value;const target=parseFloat(document.getElementById('alPrice').value);if(!t||!target)return;alerts.push({ticker:t,cond:cond,target:target,triggered:false});closeModal('alertModal');renderAlerts();showToast('Alert set');}
 
+// ===================== LIVE FX RATES =====================
+// Fetches live USD/SGD, USD/HKD, USD/GBP, USD/EUR, USD/JPY from Yahoo Finance.
+// Called at the start of refreshPrices() so all MV/yield calcs use current rates.
+async function fetchLiveFX(){
+  const pairs=[
+    {ticker:'SGDUSD=X', key:'SGD', invert:true},
+    {ticker:'HKDUSD=X', key:'HKD', invert:true},
+    {ticker:'GBPUSD=X', key:'GBP', invert:false},
+    {ticker:'EURUSD=X', key:'EUR', invert:false},
+    {ticker:'JPYUSD=X', key:'JPY', invert:true},
+  ];
+  for(var i=0;i<pairs.length;i++){
+    try{
+      var p=pairs[i];
+      var url='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(p.ticker)+'?interval=1d&range=5d';
+      var proxy='https://corsproxy.io/?'+encodeURIComponent(url);
+      var res=await fetch(proxy);
+      if(!res.ok)continue;
+      var data=await res.json();
+      var price=data&&data.chart&&data.chart.result&&data.chart.result[0]&&data.chart.result[0].meta&&data.chart.result[0].meta.regularMarketPrice;
+      if(!price||price<=0)continue;
+      // Yahoo SGDUSD=X returns how many USD per 1 SGD (e.g. 0.741)
+      // We store FX as how many local currency per 1 USD (e.g. SGD=1.35)
+      // So invert=true: FX[key] = 1/price
+      // For GBPUSD=X: returns USD per GBP (e.g. 1.327), we want GBP per USD = 1/1.327 = 0.754
+      FX[p.key]=p.invert?(1/price):( 1/price);
+      // GBX = GBP * 100
+      if(p.key==='GBP') FX['GBX']=FX['GBP']*100;
+    }catch(e){}
+  }
+}
+
 // ===================== LIVE PRICES via corsproxy.io =====================
 async function refreshPrices(){
   document.getElementById('syncStatus').textContent='Syncing...';
+  document.getElementById('yhStatus').textContent='Fetching live FX rates...';
+  await fetchLiveFX();
   document.getElementById('yhStatus').textContent='Fetching prices & dividends via corsproxy.io...';
   const tickers=[...new Set([...openH().map(function(h){return h.ticker;}),... watchlist.map(function(w){return w.ticker;})])].slice(0,20);
   var n=0, divAdded=0;

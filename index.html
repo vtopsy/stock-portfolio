@@ -1078,12 +1078,14 @@ function renderHoldings(){
       });
     }
     if(xdFound)xdBadge='<span style="background:#e6a817;color:#000;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:5px;vertical-align:middle">XD</span>';
-    // CD badge: show only when Yahoo's meta.exDividendDate is strictly in the future.
-    // liveNextExDate is populated exclusively from meta.exDividendDate during refreshPrices,
-    // so it only exists when Yahoo has officially declared a next ex-date.
+    // CD badge: show if projected/declared next ex-date is within 90 days
     var cdBadge='';
-    if(!xdFound&&liveNextExDate[h.ticker]&&liveNextExDate[h.ticker]>today()){
-      cdBadge='<span style="background:#3b82f6;color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:5px;vertical-align:middle">CD</span>';
+    if(!xdFound&&liveNextExDate[h.ticker]){
+      var cdExTime=new Date(liveNextExDate[h.ticker]).getTime();
+      var days90=90*24*60*60*1000;
+      if(cdExTime>todayTime&&cdExTime<=todayTime+days90){
+        cdBadge='<span style="background:#3b82f6;color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:5px;vertical-align:middle">CD</span>';
+      }
     }
     return '<tr>'
       +'<td style="color:var(--text3)">'+(i+1)+'</td>'
@@ -1646,8 +1648,31 @@ async function refreshPrices(){
           if(meta.exDividendDate){
             const metaExStr=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];
             liveExDates[ticker]=metaExStr;
-            // Store separately so CD badge knows Yahoo has a declared future ex-date
             liveNextExDate[ticker]=metaExStr;
+          } else if(liveExInfo[ticker]&&liveExInfo[ticker].exDate){
+            // meta.exDividendDate not available — estimate next ex-date from payment history.
+            // Count distinct payment dates in the last 12 months to determine frequency,
+            // then project forward from the latest known ex-date.
+            const lastExStr=liveExInfo[ticker].exDate;
+            const lastExMs=new Date(lastExStr).getTime();
+            const todayMs=Date.now();
+            const days90=90*24*60*60*1000;
+            // Only project if last ex-date is in the past
+            if(lastExMs<todayMs){
+              // Determine frequency from T12M dividend events
+              const oneYearAgo=new Date();oneYearAgo.setFullYear(oneYearAgo.getFullYear()-1);
+              const t12evs=result.events&&result.events.dividends
+                ?Object.values(result.events.dividends).filter(function(ev){return ev.date*1000>=oneYearAgo.getTime();})
+                :[];
+              const freq=t12evs.length||1; // payments in last 12 months
+              const intervalMs=(365/freq)*24*60*60*1000;
+              const nextExMs=lastExMs+intervalMs;
+              const nextExStr=new Date(nextExMs).toISOString().split('T')[0];
+              // Only store if projected next ex-date is within 90 days from today
+              if(nextExMs>todayMs&&nextExMs<=todayMs+days90){
+                liveNextExDate[ticker]=nextExStr;
+              }
+            }
           }
           if(h&&meta.dividendDate&&meta.exDividendDate){
             const exDate=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];

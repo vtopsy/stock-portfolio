@@ -572,6 +572,7 @@ const liveExInfo={};
 let deletedDivKeys=new Set(); // keys blocked from re-adding (ex-date entries user deleted)
 let pendingDividends=[]; // auto dividends waiting for payment date to arrive
 let divOverrides={}; // manual per-share overrides: {ticker:{perShare,currency}} — survives refresh
+let liveNextExDate={}; // Yahoo meta.exDividendDate per ticker — declared next ex-date
 
 let FX={USD:1,SGD:1.35,HKD:7.82,GBP:0.79,GBX:79,EUR:0.92,JPY:151.2}; // updated by fetchLiveFX()
 // Dividend withholding tax rates for auto-added dividends only (CSV imports already net of tax)
@@ -1077,9 +1078,16 @@ function renderHoldings(){
       });
     }
     if(xdFound)xdBadge='<span style="background:#e6a817;color:#000;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:5px;vertical-align:middle">XD</span>';
+    // CD badge: show only when Yahoo's meta.exDividendDate is strictly in the future.
+    // liveNextExDate is populated exclusively from meta.exDividendDate during refreshPrices,
+    // so it only exists when Yahoo has officially declared a next ex-date.
+    var cdBadge='';
+    if(!xdFound&&liveNextExDate[h.ticker]&&liveNextExDate[h.ticker]>today()){
+      cdBadge='<span style="background:#3b82f6;color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:5px;vertical-align:middle">CD</span>';
+    }
     return '<tr>'
       +'<td style="color:var(--text3)">'+(i+1)+'</td>'
-      +'<td><b>'+h.ticker+'</b>'+xdBadge+'</td>'
+      +'<td><b>'+h.ticker+'</b>'+xdBadge+cdBadge+'</td>'
       +'<td style="color:var(--text2)">'+h.name+'</td>'
       +'<td>'+portPct+'%</td>'
       +'<td class="r">'+h.shares.toLocaleString(undefined,{maximumFractionDigits:4})+'</td>'
@@ -1635,7 +1643,12 @@ async function refreshPrices(){
             }
           }
           // Also check meta fields as fallback (works for US stocks)
-          if(meta.exDividendDate){liveExDates[ticker]=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];}
+          if(meta.exDividendDate){
+            const metaExStr=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];
+            liveExDates[ticker]=metaExStr;
+            // Store separately so CD badge knows Yahoo has a declared future ex-date
+            liveNextExDate[ticker]=metaExStr;
+          }
           if(h&&meta.dividendDate&&meta.exDividendDate){
             const exDate=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];
             const payDate=new Date(meta.dividendDate*1000).toISOString().split('T')[0];

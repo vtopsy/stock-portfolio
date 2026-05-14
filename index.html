@@ -603,41 +603,77 @@ function totalDivReceivedUSD(ticker){
     .reduce(function(s,d){return s+(parseFloat(d.amount)||0);},0);
 }
 
-// Trailing-12-month dividends only — used for CostY% and CurrY% yield calculations.
-// Using all-time dividends (totalDivReceivedUSD) inflates yields for long-held stocks
-// because it accumulates every payment ever received instead of the annual run-rate.
-// If a divOverride is set for a ticker, the upcoming dividend amount uses that instead
-// of whatever Yahoo Finance returned, so yields also reflect the corrected figure.
+// Annual dividend for yield calculations (CostY%, CurrY%).
+//
+// Strategy: use ANNUALISED PER-SHARE rate × current shares, not raw T12M sum.
+// Raw T12M sum understates yields when share count grew during the year
+// (e.g. bought 100 more BATS in Oct 2025 → only 2 of 4 annual payments reflect
+// the full 300-share count, making T12M ~16% too low).
+//
+// Method:
+//  1. Find the most recent completed dividend payment in the dividends array.
+//  2. Derive per-share amount from that payment ÷ shares held at that time.
+//  3. Count how many payments per year (frequency) from T12M history.
+//  4. Annual div = perShare × frequency × currentShares (in USD).
+//  5. Fallback to raw T12M sum if we can't determine per-share or frequency.
+//  6. If a manual divOverride is set, use that per-share instead.
 function annualDivUSD(ticker){
-  var cutoff=new Date();
-  cutoff.setFullYear(cutoff.getFullYear()-1);
-  var cutoffStr=cutoff.toISOString().split('T')[0];
-  var pastTotal=dividends
-    .filter(function(d){
-      if(d.upcoming||d.date>today())return false; // exclude upcoming/future
-      if(d.date<cutoffStr)return false;            // exclude older than 12 months
-      if(!ticker)return true;
-      return (d.ticker||'').trim().toUpperCase()===(ticker||'').trim().toUpperCase();
-    })
-    .reduce(function(s,d){return s+(parseFloat(d.amount)||0);},0);
+  var h=ticker?openH().find(function(x){return x.ticker===ticker;}):null;
+  var currentShares=h?h.shares:0;
+  var hCur=h?(h.currency||'USD'):'USD';
 
-  // If there's a manual override, replace the upcoming dividend amount in yield calc
-  if(ticker&&divOverrides[ticker]){
-    var h=openH().find(function(x){return x.ticker===ticker;});
-    if(h){
-      var override=divOverrides[ticker];
-      var taxRate=getDivTaxRate(ticker,h.exchange);
-      var grossOrig=override.perShare*h.shares;
-      var netOrig=grossOrig*(1-taxRate);
-      var netUSD=toUSD(netOrig, h.currency||'USD');
-      // Add override upcoming dividend to trailing total (replacing any upcoming entry)
-      var upcomingInDividends=dividends.filter(function(d){
-        return d.upcoming&&(d.ticker||'').trim().toUpperCase()===ticker.trim().toUpperCase();
-      }).reduce(function(s,d){return s+(parseFloat(d.amount)||0);},0);
-      return pastTotal - upcomingInDividends + netUSD;
-    }
+  // Manual override: use override per-share × current shares × (1-tax) annualised
+  if(ticker&&divOverrides[ticker]&&h){
+    var override=divOverrides[ticker];
+    var taxRate=getDivTaxRate(ticker,h.exchange);
+    // Find payment frequency from T12M history (fallback 1)
+    var cutoffO=new Date();cutoffO.setFullYear(cutoffO.getFullYear()-1);
+    var cutoffStrO=cutoffO.toISOString().split('T')[0];
+    var t12payments=dividends.filter(function(d){
+      return !d.upcoming&&d.date<=today()&&d.date>=cutoffStrO&&
+        (d.ticker||'').trim().toUpperCase()===ticker.trim().toUpperCase();
+    });
+    // Group by exDate/date to count distinct payment events (not sub-components)
+    var payDates=Array.from(new Set(t12payments.map(function(d){return d.exDate||d.date;})));
+    var freq=payDates.length||1;
+    var grossPerShare=override.perShare;
+    var netPerShare=grossPerShare*(1-taxRate);
+    var annualNetOrig=netPerShare*freq*currentShares;
+    return toUSD(annualNetOrig, hCur);
   }
-  return pastTotal;
+
+  // Build T12M payment list
+  var cutoff=new Date();cutoff.setFullYear(cutoff.getFullYear()-1);
+  var cutoffStr=cutoff.toISOString().split('T')[0];
+  var t12=dividends.filter(function(d){
+    if(d.upcoming||d.date>today())return false;
+    if(d.date<cutoffStr)return false;
+    if(!ticker)return true;
+    return (d.ticker||'').trim().toUpperCase()===(ticker||'').trim().toUpperCase();
+  });
+
+  if(!ticker||!h||currentShares<=0)return t12.reduce(function(s,d){return s+(parseFloat(d.amount)||0);},0);
+
+  // Group T12M entries by payment event (same exDate or same date = same event)
+  var eventMap={};
+  t12.forEach(function(d){
+    var key=d.exDate||d.date;
+    if(!eventMap[key])eventMap[key]={total:0,date:d.date};
+    eventMap[key].total+=(parseFloat(d.amount)||0);
+  });
+  var events=Object.values(eventMap).sort(function(a,b){return a.date<b.date?1:-1;});
+  var freq=events.length||1;
+
+  if(events.length===0)return 0;
+
+  // Use the most recent payment to derive per-share rate in USD
+  // then annualise: perShareUSD × freq × currentShares
+  var latestTotal=events[0].total; // USD already (dividends array stores USD)
+  var latestPerShareUSD=currentShares>0?latestTotal/currentShares:0;
+
+  // Annualised = perShare × freq × currentShares
+  var annualUSD=latestPerShareUSD*freq*currentShares;
+  return annualUSD;
 }
 
 // Manual dividend per-share override — lets user correct inaccurate Yahoo data.
@@ -1462,7 +1498,7 @@ function saveEditCashTx(){
     else pendingDividends.push(entry);
     try{const ts=Date.now();localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:ts}));updateLastRefreshedLabel(ts);}catch(e){}
   }
-  closeModal('editCashTxModal');renderCash();renderMetrics();renderUpcomingDivs();saveToFirebase();showToast('Cash transaction updated');
+  closeModal('editCashTxModal');renderCash();renderMetrics();renderUpcomingDivs();renderDivHistory();renderDivYearlyTable();saveToFirebase();showToast('Cash transaction updated');
 }
 function delCashTx(idx){
   if(!confirm('Delete this cash transaction?'))return;
@@ -1498,7 +1534,7 @@ function delCashTx(idx){
     }
     try{const ts=Date.now();localStorage.setItem('piq_prices',JSON.stringify({prices:livePrices,exDates:liveExDates,exInfo:liveExInfo,deletedKeys:[...deletedDivKeys],pendingDividends:pendingDividends,ts:ts}));updateLastRefreshedLabel(ts);}catch(e){}
   }
-  renderCash();renderMetrics();updateDivChart();saveToFirebase();showToast('Deleted');
+  renderCash();renderMetrics();updateDivChart();renderDivHistory();renderDivYearlyTable();saveToFirebase();showToast('Deleted');
 }
 
 function addWatch(){const t=document.getElementById('wTicker').value.toUpperCase().trim();const n=document.getElementById('wName').value.trim();if(!t)return;watchlist.push({ticker:t,name:n||t,price:0,chg:0,pct:0});closeModal('addWatchModal');renderWatchlist();showToast(t+' added');}

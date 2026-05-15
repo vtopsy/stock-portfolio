@@ -599,13 +599,8 @@ const today=()=>new Date().toISOString().split('T')[0];
 
 // ===================== HELPERS =====================
 function totalDivReceivedUSD(ticker){
-  return dividends
-    .filter(function(d){
-      if(d.upcoming||d.date>today())return false; // exclude upcoming
-      if(!ticker)return true;
-      return (d.ticker||'').trim().toUpperCase()===(ticker||'').trim().toUpperCase();
-    })
-    .reduce(function(s,d){return s+(parseFloat(d.amount)||0);},0);
+  // Use cashTxList as source of truth
+  return cashDivs(ticker).reduce(function(s,d){return s+d.amountUSD;},0);
 }
 
 // Annual dividend for yield calculations (CostY%, CurrY%).
@@ -631,14 +626,9 @@ function annualDivUSD(ticker){
   if(ticker&&divOverrides[ticker]&&h){
     var override=divOverrides[ticker];
     var taxRate=getDivTaxRate(ticker,h.exchange);
-    // Find payment frequency from T12M history (fallback 1)
     var cutoffO=new Date();cutoffO.setFullYear(cutoffO.getFullYear()-1);
     var cutoffStrO=cutoffO.toISOString().split('T')[0];
-    var t12payments=dividends.filter(function(d){
-      return !d.upcoming&&d.date<=today()&&d.date>=cutoffStrO&&
-        (d.ticker||'').trim().toUpperCase()===ticker.trim().toUpperCase();
-    });
-    // Group by exDate/date to count distinct payment events (not sub-components)
+    var t12payments=cashDivs(ticker).filter(function(d){return d.date>=cutoffStrO;});
     var payDates=Array.from(new Set(t12payments.map(function(d){return d.exDate||d.date;})));
     var freq=payDates.length||1;
     var grossPerShare=override.perShare;
@@ -647,38 +637,27 @@ function annualDivUSD(ticker){
     return toUSD(annualNetOrig, hCur);
   }
 
-  // Build T12M payment list
+  // T12M from cashTxList (single source of truth)
   var cutoff=new Date();cutoff.setFullYear(cutoff.getFullYear()-1);
   var cutoffStr=cutoff.toISOString().split('T')[0];
-  var t12=dividends.filter(function(d){
-    if(d.upcoming||d.date>today())return false;
-    if(d.date<cutoffStr)return false;
-    if(!ticker)return true;
-    return (d.ticker||'').trim().toUpperCase()===(ticker||'').trim().toUpperCase();
-  });
+  var t12=cashDivs(ticker).filter(function(d){return d.date>=cutoffStr;});
 
-  if(!ticker||!h||currentShares<=0)return t12.reduce(function(s,d){return s+(parseFloat(d.amount)||0);},0);
+  if(!ticker||!h||currentShares<=0)return t12.reduce(function(s,d){return s+d.amountUSD;},0);
 
-  // Group T12M entries by payment event (same exDate or same date = same event)
+  // Group by payment date to count distinct events
   var eventMap={};
   t12.forEach(function(d){
     var key=d.exDate||d.date;
-    if(!eventMap[key])eventMap[key]={total:0,date:d.date};
-    eventMap[key].total+=(parseFloat(d.amount)||0);
+    if(!eventMap[key])eventMap[key]={totalUSD:0,date:d.date};
+    eventMap[key].totalUSD+=d.amountUSD;
   });
   var events=Object.values(eventMap).sort(function(a,b){return a.date<b.date?1:-1;});
   var freq=events.length||1;
-
   if(events.length===0)return 0;
 
-  // Use the most recent payment to derive per-share rate in USD
-  // then annualise: perShareUSD × freq × currentShares
-  var latestTotal=events[0].total; // USD already (dividends array stores USD)
-  var latestPerShareUSD=currentShares>0?latestTotal/currentShares:0;
-
-  // Annualised = perShare × freq × currentShares
-  var annualUSD=latestPerShareUSD*freq*currentShares;
-  return annualUSD;
+  // Annualise: latest payment per share × freq × current shares
+  var latestPerShareUSD=events[0].totalUSD/currentShares;
+  return latestPerShareUSD*freq*currentShares;
 }
 
 // Manual dividend per-share override — lets user correct inaccurate Yahoo data.
@@ -823,7 +802,7 @@ function updateSectorChart(){
 function updateDivChart(view){
   view=view||'annual';
   const ym={};
-  dividends.forEach(d=>{if(!d.date)return;const y=d.date.slice(0,4);if(!ym[y])ym[y]={total:0,byTicker:{},byMonth:Array(12).fill(0)};ym[y].total+=d.amount;ym[y].byTicker[d.ticker]=(ym[y].byTicker[d.ticker]||0)+d.amount;ym[y].byMonth[parseInt(d.date.slice(5,7))-1]+=d.amount;});
+  cashDivs().forEach(function(d){if(!d.date)return;const y=d.date.slice(0,4);if(!ym[y])ym[y]={total:0,byTicker:{},byMonth:Array(12).fill(0)};ym[y].total+=d.amountUSD;ym[y].byTicker[d.ticker]=(ym[y].byTicker[d.ticker]||0)+d.amountUSD;ym[y].byMonth[parseInt(d.date.slice(5,7))-1]+=d.amountUSD;});
   window._ym=ym;
   const years=Object.keys(ym).sort();
   if(view==='annual'){
@@ -836,7 +815,7 @@ function updateDivChart(view){
     divChart.data.datasets=[{label:'Dividends',data:(ym[cur]?ym[cur].byMonth:Array(12).fill(0)).map(v=>toBase(v)),backgroundColor:Array(12).fill(0).map((_,i)=>i<=now?'#00c896bb':'rgba(108,99,255,0.35)'),borderRadius:4}];
     divChart.options.plugins.legend.display=false;
   } else {
-    const tickers=[...new Set(dividends.map(d=>d.ticker))];
+    const tickers=[...new Set(cashDivs().map(function(d){return d.ticker;}))];
     const colors=['#6c63ffbb','#00d2ffbb','#00c896bb','#ffb347bb','#ff6eb4bb','#ff5c7abb','#20e3b2bb','#9ba3c0bb'];
     divChart.data.labels=years;
     divChart.data.datasets=tickers.map((t,i)=>({label:t,data:years.map(y=>toBase(ym[y]?ym[y].byTicker[t]||0:0)),backgroundColor:colors[i%colors.length],borderRadius:3,stack:'s'}));
@@ -899,7 +878,7 @@ function renderHoldingsSummaryTable(){
     curMap[c].mv+=h.mv;
     curMap[c].cost+=h.totalCostUSD;
     curMap[c].pnl+=h.pnl;
-    curMap[c].annDiv+=totalDivReceivedUSD(h.ticker);
+    curMap[c].annDiv+=annualDivUSD(h.ticker);
   });
   const closedPnl={};
   const runSh={},runCost={};
@@ -1234,14 +1213,15 @@ function renderPager(id,page,pages,total,cb){
 function renderDivYearlyTable(){
   const el=document.getElementById('divYearlyTable');
   if(!el)return;
-  if(!dividends.length){el.innerHTML='<div style="color:var(--text3);padding:8px">No dividend records.</div>';return;}
-  // Build yearly totals in base currency
+  const allCashDivs=cashDivs();
+  if(!allCashDivs.length){el.innerHTML='<div style="color:var(--text3);padding:8px">No dividend records.</div>';return;}
+  // Build yearly totals from cashTxList (single source of truth)
   const ym={};
-  dividends.forEach(function(d){
+  allCashDivs.forEach(function(d){
     if(!d.date)return;
     const y=d.date.slice(0,4);
     if(!ym[y])ym[y]={total:0};
-    ym[y].total+=d.amount;
+    ym[y].total+=d.amountUSD;
   });
   const years=Object.keys(ym).sort();
   const grandTotal=years.reduce(function(s,y){return s+ym[y].total;},0);
@@ -1280,44 +1260,47 @@ function renderDivYearlyTable(){
 }
 
 function renderDivHistory(){
-  // Filter out upcoming/pending entries — those belong in Upcoming Dividends section only
-  const todayStr2=today();
-  const divToShow=dividends.filter(function(d){
-    if(d.upcoming)return false;
-    // Auto entries with future payment date belong in Upcoming Dividends only
-    if(d.auto){
-      const payDate=d.payDate||d.date;
-      if(payDate>todayStr2)return false;
-    }
-    return true;
-  });
-  document.getElementById('divHistBody').innerHTML=divToShow.length
-    ?'<table class="tbl"><thead><tr><th>Pay Date</th><th>Ex-Date</th><th>Ticker</th><th>Name</th><th class="r">Amount</th></tr></thead><tbody>'+[...divToShow].sort(function(a,b){return new Date(b.date)-new Date(a.date);}).map(function(d){
-      // Find matching cash entry — use same-date match first, then fall back to amount proximity
-      var ct=cashTxList.find(function(c){
-        if((c.type||'').toUpperCase()!=='DIVIDEND'||c.symbol!==d.ticker||c.date!==d.date)return false;
-        var ctUSD=toUSD(Math.abs(parseFloat(c.amount)||0),c.currency||baseCurrency);
-        // Accept if within 20% or within $1 (handles FX rate drift)
-        return Math.abs(ctUSD-d.amount)<Math.max(d.amount*0.2,1);
-      });
-      // If no close match, just use same ticker+date regardless of amount
-      if(!ct)ct=cashTxList.find(function(c){return (c.type||'').toUpperCase()==='DIVIDEND'&&c.symbol===d.ticker&&c.date===d.date;});
-      const origCur=(ct&&ct.currency)||(openH().find(function(h){return h.ticker===d.ticker;})||{}).currency||baseCurrency;
-      const origAmt=ct?parseFloat(ct.amount):(d.amount*(FX[origCur]||1));
-      const dispAmt=origCur+' '+origAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
-      const exDate=d.exDate||liveExDates[d.ticker]||'--';
-      const isUpcoming=d.upcoming||d.date>today();
-      const rowStyle=isUpcoming?'opacity:0.6;font-style:italic':'';
-      const upcomingBadge=isUpcoming?'<span style="background:var(--amber);color:#000;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;margin-left:4px">EX</span>':'';
-      return '<tr style="'+rowStyle+'">'
-        +'<td style="color:var(--text2)">'+(isUpcoming?'--':d.date)+'</td>'
-        +'<td style="color:var(--text3);font-size:12px">'+exDate+upcomingBadge+'</td>'
-        +'<td><b>'+d.ticker+'</b></td>'
-        +'<td style="color:var(--text2)">'+(d.name||'--')+'</td>'
-        +'<td class="r '+(isUpcoming?'':'pos')+'">'+( isUpcoming?'~':'+' )+dispAmt+'</td>'
-        +'</tr>';
-    }).join('')+'</tbody></table>'
-    :'<div style="color:var(--text3);padding:8px 0">No dividend records.</div>';
+  // Read directly from cashTxList — single source of truth
+  const rows=cashDivs().sort(function(a,b){return a.date<b.date?1:-1;});
+  // Also show upcoming dividends from dividends[] (auto Yahoo entries with future date)
+  const upcoming=dividends.filter(function(d){return d.auto&&d.upcoming;});
+
+  if(!rows.length&&!upcoming.length){
+    document.getElementById('divHistBody').innerHTML='<div style="color:var(--text3);padding:8px 0">No dividend records.</div>';
+    return;
+  }
+
+  const upcomingRows=upcoming.map(function(d){
+    const origAmt=(d.amount*(FX[d.currency||baseCurrency]||1));
+    const cur=d.currency||baseCurrency;
+    const dispAmt=cur+' '+origAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    const exDate=d.exDate||'--';
+    return '<tr style="opacity:0.6;font-style:italic">'
+      +'<td style="color:var(--text2)">--</td>'
+      +'<td style="color:var(--text3);font-size:12px">'+exDate
+      +'<span style="background:var(--amber);color:#000;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;margin-left:4px">EX</span></td>'
+      +'<td><b>'+d.ticker+'</b></td>'
+      +'<td style="color:var(--text2)">'+(d.name||'--')+'</td>'
+      +'<td class="r">~'+dispAmt+'</td>'
+      +'</tr>';
+  }).join('');
+
+  const paidRows=rows.map(function(d){
+    const dispAmt=d.currency+' '+d.amountOrig.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    const exDate=d.exDate||liveExDates[d.ticker]||'--';
+    return '<tr>'
+      +'<td style="color:var(--text2)">'+d.date+'</td>'
+      +'<td style="color:var(--text3);font-size:12px">'+exDate+'</td>'
+      +'<td><b>'+d.ticker+'</b></td>'
+      +'<td style="color:var(--text2)">'+(d.name||'--')+'</td>'
+      +'<td class="r pos">+'+dispAmt+'</td>'
+      +'</tr>';
+  }).join('');
+
+  document.getElementById('divHistBody').innerHTML=
+    '<table class="tbl"><thead><tr><th>Pay Date</th><th>Ex-Date</th><th>Ticker</th><th>Name</th><th class="r">Amount</th></tr></thead><tbody>'
+    +upcomingRows+paidRows
+    +'</tbody></table>';
 }
 
 function renderDripSim(){
@@ -1359,7 +1342,7 @@ function renderGeoList(){
 
 function renderXirr(){
   const mv=totalMV(),cost=totalCost(),pnl=totalPnL(),ret=cost>0?(pnl/cost*100).toFixed(1):'0.0';
-  document.getElementById('xirrBox').innerHTML=[['Total Return',(pnl>=0?'+':'')+ret+'%','Since inception'],['XIRR (est.)',cost>0?'+'+(pnl/cost*100*0.7).toFixed(1)+'%':'--','Annualized'],['Div received',dividends.length>0?fmt(totalDivReceivedUSD()):'--','Total dividends'],['vs S&P 500',pnl>=0?'+3.6%':'-1.2%','YTD']].map(function(x){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)"><div><div>'+x[0]+'</div><div style="font-size:12px;color:var(--text3)">'+x[2]+'</div></div><div style="font-weight:600;color:'+(x[1].charAt(0)==='+' ?'var(--green)':x[1].charAt(0)==='-'?'var(--red)':'var(--text)')+'">'+x[1]+'</div></div>';}).join('');
+  document.getElementById('xirrBox').innerHTML=[['Total Return',(pnl>=0?'+':'')+ret+'%','Since inception'],['XIRR (est.)',cost>0?'+'+(pnl/cost*100*0.7).toFixed(1)+'%':'--','Annualized'],['Div received',cashDivs().length>0?fmt(totalDivReceivedUSD()):'--','Total dividends'],['vs S&P 500',pnl>=0?'+3.6%':'-1.2%','YTD']].map(function(x){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)"><div><div>'+x[0]+'</div><div style="font-size:12px;color:var(--text3)">'+x[2]+'</div></div><div style="font-weight:600;color:'+(x[1].charAt(0)==='+' ?'var(--green)':x[1].charAt(0)==='-'?'var(--red)':'var(--text)')+'">'+x[1]+'</div></div>';}).join('');
 }
 
 function renderWatchlist(){
@@ -2249,78 +2232,82 @@ function applyPaymentDate(ticker, exDate, payDate){
 }
 function fetchPaymentDates(){} // no-op — payment dates now resolved inline during refreshPrices
 
+// ===================== CASH-SOURCED DIVIDEND HELPERS =====================
+// cashTxList is the single source of truth for all dividend data.
+// These helpers read directly from cashTxList so all views are always consistent.
+
+function cashDivs(ticker){
+  // Returns all past paid DIVIDEND entries from cashTxList, optionally filtered by ticker.
+  // Converts each amount to USD for consistent calculations.
+  const todayStr=today();
+  return cashTxList.filter(function(ct){
+    if((ct.type||'').toUpperCase()!=='DIVIDEND')return false;
+    if(ct.date>todayStr)return false; // exclude future/upcoming
+    if(ticker&&(ct.symbol||'').trim().toUpperCase()!==(ticker||'').trim().toUpperCase())return false;
+    return true;
+  }).map(function(ct){
+    return {
+      ticker: ct.symbol,
+      name: ct.stockName||ct.symbol,
+      date: ct.date,
+      exDate: ct.exDate||null,
+      amountOrig: Math.abs(parseFloat(ct.amount)||0),
+      currency: ct.currency||baseCurrency,
+      amountUSD: toUSD(Math.abs(parseFloat(ct.amount)||0), ct.currency||baseCurrency)
+    };
+  });
+}
+
 function deduplicateDividends(){
-  // Step 1: Dedup cashTxList — keep by ticker+date+amount
+  // cashTxList is the single source of truth for all dividend data.
+  // Rebuild dividends[] entirely from cashTxList DIVIDEND entries,
+  // then append any auto/upcoming entries (Yahoo-fetched) that have no cash equivalent.
+
+  // Step 1: Dedup cashTxList — remove exact duplicates (same symbol+date+amount)
   const seenCash={};
   cashTxList=cashTxList.filter(function(ct){
     if((ct.type||'').toUpperCase()!=='DIVIDEND')return true;
-    const amt=parseFloat(ct.amount||0).toFixed(2);
-    const k=(ct.symbol||'')+'_'+(ct.date||'')+'_'+amt;
+    const k=(ct.symbol||'')+'_'+(ct.date||'')+'_'+parseFloat(ct.amount||0).toFixed(2)+'_'+(ct.currency||'');
     if(seenCash[k])return false;
     seenCash[k]=true;
     return true;
   });
 
-  // Step 2: Dedup dividends array — keep by ticker+date+amount
-  const seenDiv={};
-  dividends=dividends.filter(function(d){
-    const amt=parseFloat(d.amount||0).toFixed(4);
-    const k=(d.ticker||'')+'_'+(d.date||'')+'_'+amt;
-    if(seenDiv[k])return false;
-    seenDiv[k]=true;
-    return true;
+  // Step 2: Rebuild dividends[] from cashTxList only (discard all old entries)
+  // Keep only auto/upcoming entries that have no matching cash entry
+  const autoUpcoming=dividends.filter(function(d){
+    return d.auto&&d.upcoming; // keep only future auto-added entries
   });
 
-  // Step 2b: Remove auto-added (Yahoo) dividend entries that duplicate imported ones.
-  // A duplicate means: same ticker, same approximate amount (within 5%), within 14 days.
-  // 14-day window (not 60) avoids falsely matching two different quarterly payments.
-  // Amount check avoids matching different-sized payments for the same stock.
-  const cashToRemoveKeys=new Set();
-  const divToRemove=new Set();
-  dividends.forEach(function(d,idx){
-    if(!d.auto)return; // only clean up Yahoo auto entries
-    const dTime=new Date(d.date).getTime();
-    const hasManualCashNearby=cashTxList.some(function(ct){
-      if((ct.type||'').toUpperCase()!=='DIVIDEND'||ct.symbol!==d.ticker)return false;
-      if(ct._key&&ct._key===d._key)return false; // skip self (same entry)
-      const isManual=!ct._key||(ct._key!==d._key);
-      if(!isManual)return false;
-      const daysDiff=Math.abs(new Date(ct.date).getTime()-dTime)/(1000*60*60*24);
-      if(daysDiff>14)return false; // must be within 14 days
-      // Amount must also match within 5% to confirm it's truly the same payment
-      const ctAmtUSD=toUSD(Math.abs(parseFloat(ct.amount)||0),ct.currency||baseCurrency);
-      const amtMatch=d.amount>0?Math.abs(d.amount-ctAmtUSD)/d.amount<0.05:ctAmtUSD<0.01;
-      return amtMatch;
-    });
-    if(hasManualCashNearby){
-      divToRemove.add(idx);
-      if(d._key)cashToRemoveKeys.add(d._key);
-    }
-  });
-  dividends=dividends.filter(function(_,idx){return !divToRemove.has(idx);});
-  cashTxList=cashTxList.filter(function(ct){
-    return !ct._key||!cashToRemoveKeys.has(ct._key);
-  });
+  dividends=[];
 
-  // Step 3: Sync — ensure every DIVIDEND cash entry has a matching dividends record
+  // Add one dividends[] entry per cashTxList DIVIDEND row
   cashTxList.forEach(function(ct){
     if((ct.type||'').toUpperCase()!=='DIVIDEND')return;
     if(!ct.symbol||!ct.date||!ct.amount)return;
     const amtUSD=toUSD(Math.abs(parseFloat(ct.amount)||0), ct.currency||baseCurrency);
-    const ctTime=new Date(ct.date).getTime();
-    // Check if a dividends record already exists within 14 days with similar amount (5% tolerance)
-    const alreadyExists=dividends.some(function(d){
-      if(d.ticker!==ct.symbol)return false;
-      const daysDiff=Math.abs(new Date(d.date).getTime()-ctTime)/(1000*60*60*24);
-      return daysDiff<=14&&Math.abs(d.amount-amtUSD)<Math.max(amtUSD*0.05,0.01);
+    const key='DIV_'+ct.symbol+'_'+ct.date+'_'+amtUSD.toFixed(4)+'_'+(ct.currency||'');
+    dividends.push({
+      _key: key,
+      ticker: ct.symbol,
+      name: ct.stockName||ct.symbol,
+      amount: amtUSD,
+      date: ct.date,
+      currency: ct.currency||baseCurrency,
+      exDate: ct.exDate||undefined,
+      type: 'Dividend'
     });
-    if(!alreadyExists){
-      const key='DIV_'+ct.symbol+'_'+ct.date+'_'+amtUSD.toFixed(4);
-      // Avoid adding duplicate keys
-      if(!dividends.some(function(d){return d._key===key;})){
-        dividends.push({_key:key,ticker:ct.symbol,name:ct.stockName||ct.symbol,amount:amtUSD,date:ct.date,type:'Dividend'});
-      }
-    }
+  });
+
+  // Step 3: Re-append auto/upcoming entries (upcoming dividends from Yahoo)
+  autoUpcoming.forEach(function(d){
+    // Only add if no cash entry exists for same ticker within 14 days
+    const dTime=new Date(d.date).getTime();
+    const hasCash=cashTxList.some(function(ct){
+      if((ct.type||'').toUpperCase()!=='DIVIDEND'||ct.symbol!==d.ticker)return false;
+      return Math.abs(new Date(ct.date).getTime()-dTime)/(1000*60*60*24)<=14;
+    });
+    if(!hasCash) dividends.push(d);
   });
 }
 deduplicateDividends();

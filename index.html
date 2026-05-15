@@ -1663,13 +1663,18 @@ async function refreshPrices(){
           if(evs){
             const evList=Object.values(evs).map(function(ev){return {date:new Date(ev.date*1000).toISOString().split('T')[0],amount:ev.amount};}).sort(function(a,b){return a.date.localeCompare(b.date);});
             if(evList.length){
-              const latest=evList[evList.length-1];
-              liveExDates[ticker]=latest.date;
-              var amtPerShare=parseFloat(latest.amount)||0;
-              if(isLSE) amtPerShare=amtPerShare/100;
-              const infoCur=isLSE?'GBP':(h?h.currency:'USD');
-              const totalShares=h?h.shares:0;
-              liveExInfo[ticker]={exDate:latest.date,amtPerShare:amtPerShare,currency:infoCur,shares:totalShares};
+              // Use most recent PAST ex-date for liveExDates (XD badge) and liveExInfo
+              const todayStr=today();
+              const pastEvs=evList.filter(function(ev){return ev.date<=todayStr;});
+              const latest=pastEvs.length?pastEvs[pastEvs.length-1]:null;
+              if(latest){
+                liveExDates[ticker]=latest.date;
+                var amtPerShare=parseFloat(latest.amount)||0;
+                if(isLSE) amtPerShare=amtPerShare/100;
+                const infoCur=isLSE?'GBP':(h?h.currency:'USD');
+                const totalShares=h?h.shares:0;
+                liveExInfo[ticker]={exDate:latest.date,amtPerShare:amtPerShare,currency:infoCur,shares:totalShares};
+              }
             }
           }
           // Check dividend events for any future ex-date (Yahoo sometimes declares upcoming ones)
@@ -1686,8 +1691,13 @@ async function refreshPrices(){
           // Also check meta fields as fallback (works for US stocks)
           if(meta.exDividendDate){
             const metaExStr=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];
-            liveExDates[ticker]=metaExStr;
-            if(!liveNextExDate[ticker]) liveNextExDate[ticker]=metaExStr;
+            // liveExDates = past/recent ex-date only (used for XD badge)
+            // liveNextExDate = future ex-date only (used for CD badge)
+            if(metaExStr<=today()){
+              liveExDates[ticker]=metaExStr;
+            } else {
+              if(!liveNextExDate[ticker]) liveNextExDate[ticker]=metaExStr;
+            }
           } else if(liveExInfo[ticker]&&liveExInfo[ticker].exDate){
             // meta.exDividendDate not available — estimate next ex-date from payment history.
             // Count distinct payment dates in the last 12 months to determine frequency,

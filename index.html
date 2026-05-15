@@ -1078,25 +1078,11 @@ function renderHoldings(){
       });
     }
     if(xdFound)xdBadge='<span style="background:#e6a817;color:#000;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:5px;vertical-align:middle">XD</span>';
-    // CD badge: use manual exDateOverride if set, otherwise Yahoo liveNextExDate.
-    // Shows blue CD badge if next ex-date is strictly >3 days and <=90 days away.
     var cdBadge='';
-    var cdExStr=exDateOverrides[h.ticker]||liveNextExDate[h.ticker]||'';
-    var isExDateOverridden=!!exDateOverrides[h.ticker];
-    if(!xdFound&&cdExStr){
-      var cdExTime=new Date(cdExStr).getTime();
-      var days90=90*24*60*60*1000;
-      var xdWindow=3*86400000;
-      if(cdExTime>todayTime+xdWindow&&cdExTime<=todayTime+days90){
-        var overrideMark=isExDateOverridden?'<span style="font-size:9px;background:var(--amber);color:#000;border-radius:3px;padding:1px 3px;margin-left:2px">✎</span>':'';
-        cdBadge='<span style="background:#3b82f6;color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:5px;vertical-align:middle">CD</span>'+overrideMark;
-      }
-    }
-    // Edit button for ex-date override — always visible so user can set/clear
-    var exDateEditBtn='<button onclick="setExDateOverride(this)" data-ticker="'+h.ticker+'" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:10px;padding:0 2px;vertical-align:middle" title="Set next ex-date for CD badge">📅</button>';
+    var exDateEditBtn='';
     return '<tr>'
       +'<td style="color:var(--text3)">'+(i+1)+'</td>'
-      +'<td><b>'+h.ticker+'</b>'+xdBadge+cdBadge+exDateEditBtn+'</td>'
+      +'<td><b>'+h.ticker+'</b>'+xdBadge+'</td>'
       +'<td style="color:var(--text2)">'+h.name+'</td>'
       +'<td>'+portPct+'%</td>'
       +'<td class="r">'+h.shares.toLocaleString(undefined,{maximumFractionDigits:4})+'</td>'
@@ -1262,28 +1248,13 @@ function renderDivYearlyTable(){
 function renderDivHistory(){
   // Read directly from cashTxList — single source of truth
   const rows=cashDivs().sort(function(a,b){return a.date<b.date?1:-1;});
-  // Also show upcoming dividends from dividends[] (auto Yahoo entries with future date)
-  const upcoming=dividends.filter(function(d){return d.auto&&d.upcoming;});
 
-  if(!rows.length&&!upcoming.length){
+  if(!rows.length){
     document.getElementById('divHistBody').innerHTML='<div style="color:var(--text3);padding:8px 0">No dividend records.</div>';
     return;
   }
 
-  const upcomingRows=upcoming.map(function(d){
-    const origAmt=(d.amount*(FX[d.currency||baseCurrency]||1));
-    const cur=d.currency||baseCurrency;
-    const dispAmt=cur+' '+origAmt.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
-    const exDate=d.exDate||'--';
-    return '<tr style="opacity:0.6;font-style:italic">'
-      +'<td style="color:var(--text2)">--</td>'
-      +'<td style="color:var(--text3);font-size:12px">'+exDate
-      +'<span style="background:var(--amber);color:#000;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;margin-left:4px">EX</span></td>'
-      +'<td><b>'+d.ticker+'</b></td>'
-      +'<td style="color:var(--text2)">'+(d.name||'--')+'</td>'
-      +'<td class="r">~'+dispAmt+'</td>'
-      +'</tr>';
-  }).join('');
+  const upcomingRows='';
 
   const paidRows=rows.map(function(d){
     const dispAmt=d.currency+' '+d.amountOrig.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -2233,21 +2204,47 @@ function applyPaymentDate(ticker, exDate, payDate){
 function fetchPaymentDates(){} // no-op — payment dates now resolved inline during refreshPrices
 
 // ===================== CASH-SOURCED DIVIDEND HELPERS =====================
+// Normalize ticker symbols to canonical form matching buildTicker output.
+// HK tickers are padded to 4 digits: 5.HK → 0005.HK, 823.HK → 0823.HK
+// Exchange prefixes are resolved: HKEX:5 → 0005.HK, SGX:D05 → D05.SI, LSE:SDR → SDR.L
+function normTicker(t){
+  if(!t)return '';
+  t=t.trim().toUpperCase();
+  if(t.includes(':')){
+    const parts=t.split(':');
+    const prefix=parts[0], code=parts[1];
+    if(prefix==='SGX') return code+'.SI';
+    if(prefix==='LSE') return code+'.L';
+    if(prefix==='HKEX'){
+      const padded=code.replace(/[^0-9A-Z]/g,'');
+      return (/^\d+$/.test(padded)?padded.padStart(4,'0'):padded)+'.HK';
+    }
+    return code;
+  }
+  // Pad HK tickers to 4 digits: 5.HK → 0005.HK
+  if(t.endsWith('.HK')){
+    const code=t.slice(0,-3).replace(/[^0-9A-Z]/g,'');
+    return (/^\d+$/.test(code)?code.padStart(4,'0'):code)+'.HK';
+  }
+  return t;
+}
+
 // cashTxList is the single source of truth for all dividend data.
 // These helpers read directly from cashTxList so all views are always consistent.
 
 function cashDivs(ticker){
   // Returns all past paid DIVIDEND entries from cashTxList, optionally filtered by ticker.
-  // Converts each amount to USD for consistent calculations.
+  // Normalizes ticker symbols (strips leading zeros from HK, exchange prefixes).
   const todayStr=today();
+  const normTick=ticker?normTicker(ticker):null;
   return cashTxList.filter(function(ct){
     if((ct.type||'').toUpperCase()!=='DIVIDEND')return false;
-    if(ct.date>todayStr)return false; // exclude future/upcoming
-    if(ticker&&(ct.symbol||'').trim().toUpperCase()!==(ticker||'').trim().toUpperCase())return false;
+    if(ct.date>todayStr)return false;
+    if(normTick&&normTicker(ct.symbol||'')!==normTick)return false;
     return true;
   }).map(function(ct){
     return {
-      ticker: ct.symbol,
+      ticker: normTicker(ct.symbol||ct.symbol),
       name: ct.stockName||ct.symbol,
       date: ct.date,
       exDate: ct.exDate||null,

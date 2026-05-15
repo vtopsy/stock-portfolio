@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>PortfolioIQ</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
@@ -1016,6 +1019,7 @@ function renderUpcomingDivs(){
 }
 
 function renderHoldings(){
+  // liveNextExDate is populated during refreshPrices from Yahoo future dividend events
   const search=(document.getElementById('searchHoldings')||{value:''}).value.toLowerCase();
   const all=holdingView==='open'?openH():buildHoldings().filter(function(h){return h.shares<=0.0001;}).map(calcH);
   const rows=all.filter(function(h){return h.ticker.toLowerCase().includes(search)||(h.name||'').toLowerCase().includes(search);}).sort(function(a,b){return b.mv-a.mv;});
@@ -1605,7 +1609,7 @@ async function refreshPrices(){
     try{
       // Use 3mo range with events=dividends — just enough to catch recent/upcoming payouts
       // We only add dividends AFTER the latest one already recorded for this ticker
-      const url='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(ticker)+'?interval=1d&range=6mo&events=dividends';
+      const url='https://query1.finance.yahoo.com/v8/finance/chart/'+encodeURIComponent(ticker)+'?interval=1d&range=1y&events=dividends';
       const proxy='https://corsproxy.io/?'+encodeURIComponent(url);
       const res=await fetch(proxy);
       if(res.ok){
@@ -1644,11 +1648,22 @@ async function refreshPrices(){
               liveExInfo[ticker]={exDate:latest.date,amtPerShare:amtPerShare,currency:infoCur,shares:totalShares};
             }
           }
+          // Check dividend events for any future ex-date (Yahoo sometimes declares upcoming ones)
+          if(result.events&&result.events.dividends){
+            const allEvDates=Object.values(result.events.dividends)
+              .map(function(ev){return new Date(ev.date*1000).toISOString().split('T')[0];})
+              .sort();
+            const todayStr=today();
+            const futureEvDates=allEvDates.filter(function(d){return d>todayStr;});
+            if(futureEvDates.length>0){
+              liveNextExDate[ticker]=futureEvDates[0]; // earliest upcoming declared ex-date
+            }
+          }
           // Also check meta fields as fallback (works for US stocks)
           if(meta.exDividendDate){
             const metaExStr=new Date(meta.exDividendDate*1000).toISOString().split('T')[0];
             liveExDates[ticker]=metaExStr;
-            liveNextExDate[ticker]=metaExStr;
+            if(!liveNextExDate[ticker]) liveNextExDate[ticker]=metaExStr;
           } else if(liveExInfo[ticker]&&liveExInfo[ticker].exDate){
             // meta.exDividendDate not available — estimate next ex-date from payment history.
             // Count distinct payment dates in the last 12 months to determine frequency,

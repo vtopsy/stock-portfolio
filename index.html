@@ -576,6 +576,7 @@ let deletedDivKeys=new Set(); // keys blocked from re-adding (ex-date entries us
 let pendingDividends=[]; // auto dividends waiting for payment date to arrive
 let divOverrides={}; // manual per-share overrides: {ticker:{perShare,currency}} — survives refresh
 let liveNextExDate={}; // Yahoo meta.exDividendDate per ticker — declared next ex-date
+let exDateOverrides={}; // manual next ex-date overrides: {ticker: 'YYYY-MM-DD'} — survives refresh
 
 let FX={USD:1,SGD:1.35,HKD:7.82,GBP:0.79,GBX:79,EUR:0.92,JPY:151.2}; // updated by fetchLiveFX()
 // Dividend withholding tax rates for auto-added dividends only (CSV imports already net of tax)
@@ -682,6 +683,22 @@ function annualDivUSD(ticker){
 
 // Manual dividend per-share override — lets user correct inaccurate Yahoo data.
 // Stored in localStorage as piq_divOverrides so it survives page refresh.
+function setExDateOverride(btn){
+  const ticker=btn.dataset.ticker;
+  const current=exDateOverrides[ticker]||'';
+  const val=prompt('Next ex-date for '+ticker+' (YYYY-MM-DD):\n(Leave blank to clear and use Yahoo data)', current);
+  if(val===null)return; // cancelled
+  if(val.trim()===''){
+    delete exDateOverrides[ticker];
+  } else {
+    // Validate date format
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(val.trim())){alert('Please enter date as YYYY-MM-DD');return;}
+    exDateOverrides[ticker]=val.trim();
+  }
+  try{localStorage.setItem('piq_exDateOverrides',JSON.stringify(exDateOverrides));}catch(e){}
+  renderHoldings();
+}
+
 function setDivOverride(btn){
   const ticker=btn.dataset.ticker;
   const currency=btn.dataset.currency;
@@ -1082,18 +1099,25 @@ function renderHoldings(){
       });
     }
     if(xdFound)xdBadge='<span style="background:#e6a817;color:#000;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:5px;vertical-align:middle">XD</span>';
-    // CD badge: show if projected/declared next ex-date is within 90 days
+    // CD badge: use manual exDateOverride if set, otherwise Yahoo liveNextExDate.
+    // Shows blue CD badge if next ex-date is strictly >3 days and <=90 days away.
     var cdBadge='';
-    if(!xdFound&&liveNextExDate[h.ticker]){
-      var cdExTime=new Date(liveNextExDate[h.ticker]).getTime();
+    var cdExStr=exDateOverrides[h.ticker]||liveNextExDate[h.ticker]||'';
+    var isExDateOverridden=!!exDateOverrides[h.ticker];
+    if(!xdFound&&cdExStr){
+      var cdExTime=new Date(cdExStr).getTime();
       var days90=90*24*60*60*1000;
-      if(cdExTime>todayTime&&cdExTime<=todayTime+days90){
-        cdBadge='<span style="background:#3b82f6;color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:5px;vertical-align:middle">CD</span>';
+      var xdWindow=3*86400000;
+      if(cdExTime>todayTime+xdWindow&&cdExTime<=todayTime+days90){
+        var overrideMark=isExDateOverridden?'<span style="font-size:9px;background:var(--amber);color:#000;border-radius:3px;padding:1px 3px;margin-left:2px">✎</span>':'';
+        cdBadge='<span style="background:#3b82f6;color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:5px;vertical-align:middle">CD</span>'+overrideMark;
       }
     }
+    // Edit button for ex-date override — always visible so user can set/clear
+    var exDateEditBtn='<button onclick="setExDateOverride(this)" data-ticker="'+h.ticker+'" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:10px;padding:0 2px;vertical-align:middle" title="Set next ex-date for CD badge">📅</button>';
     return '<tr>'
       +'<td style="color:var(--text3)">'+(i+1)+'</td>'
-      +'<td><b>'+h.ticker+'</b>'+xdBadge+cdBadge+'</td>'
+      +'<td><b>'+h.ticker+'</b>'+xdBadge+cdBadge+exDateEditBtn+'</td>'
       +'<td style="color:var(--text2)">'+h.name+'</td>'
       +'<td>'+portPct+'%</td>'
       +'<td class="r">'+h.shares.toLocaleString(undefined,{maximumFractionDigits:4})+'</td>'
@@ -2077,6 +2101,7 @@ try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){docu
 try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
 try{const ov=localStorage.getItem('piq_divOverrides');if(ov){const parsed=JSON.parse(ov);if(parsed&&typeof parsed==='object')Object.assign(divOverrides,parsed);}}catch(e){}
+try{const eo=localStorage.getItem('piq_exDateOverrides');if(eo){const parsed=JSON.parse(eo);if(parsed&&typeof parsed==='object')Object.assign(exDateOverrides,parsed);}}catch(e){}
 try{const lp=JSON.parse(localStorage.getItem('piq_prices')||'{}');if(lp.prices){const age=(Date.now()-(lp.ts||0))/1000/60/60;if(age<72){Object.assign(livePrices,lp.prices);if(lp.exDates)Object.assign(liveExDates,lp.exDates);if(lp.exInfo)Object.assign(liveExInfo,lp.exInfo);if(lp.nextExDates)Object.assign(liveNextExDate,lp.nextExDates);if(lp.ts)setTimeout(function(){updateLastRefreshedLabel(lp.ts);},100);if(lp.deletedKeys)lp.deletedKeys.forEach(function(k){deletedDivKeys.add(k);});if(lp.pendingDividends){pendingDividends=lp.pendingDividends;pendingDividends.forEach(function(p){if(p.exDate)liveExDates[p.ticker]=p.exDate;});}document.getElementById('syncStatus').textContent='Cached ('+(age<1?Math.round(age*60)+'m':age.toFixed(1)+'h')+')';}}}catch(e){}
 async function fetchSGXDividendDates(){
   // Fetch ex-date and payment date from dividends.sg for all SGX open holdings
@@ -2236,34 +2261,33 @@ function deduplicateDividends(){
     return true;
   });
 
-  // Step 2b: Remove auto-added (Yahoo) dividend+cash entries that duplicate imported ones
-  // An auto entry is a duplicate if a non-auto cash entry exists within 60 days for same ticker
+  // Step 2b: Remove auto-added (Yahoo) dividend entries that duplicate imported ones.
+  // A duplicate means: same ticker, same approximate amount (within 5%), within 14 days.
+  // 14-day window (not 60) avoids falsely matching two different quarterly payments.
+  // Amount check avoids matching different-sized payments for the same stock.
   const cashToRemoveKeys=new Set();
   const divToRemove=new Set();
   dividends.forEach(function(d,idx){
     if(!d.auto)return; // only clean up Yahoo auto entries
     const dTime=new Date(d.date).getTime();
-    const hasImportedCashNearby=cashTxList.some(function(ct){
-      if((ct.type||'').toUpperCase()!=='DIVIDEND'||ct.symbol!==d.ticker)return false;
-      if(ct._key&&ct._key===d._key)return false; // skip self
-      const daysDiff=Math.abs(new Date(ct.date).getTime()-dTime)/(1000*60*60*24);
-      return daysDiff<=60&&!ct._key||daysDiff<=60&&ct._key&&ct._key!==d._key;
-    });
-    // Simpler: any cash dividend for same ticker within 60 days that was NOT auto-added
     const hasManualCashNearby=cashTxList.some(function(ct){
       if((ct.type||'').toUpperCase()!=='DIVIDEND'||ct.symbol!==d.ticker)return false;
-      const daysDiff=Math.abs(new Date(ct.date).getTime()-dTime)/(1000*60*60*24);
-      // A manual/imported entry has no _key or a different _key than this dividend
+      if(ct._key&&ct._key===d._key)return false; // skip self (same entry)
       const isManual=!ct._key||(ct._key!==d._key);
-      return daysDiff<=60&&isManual;
+      if(!isManual)return false;
+      const daysDiff=Math.abs(new Date(ct.date).getTime()-dTime)/(1000*60*60*24);
+      if(daysDiff>14)return false; // must be within 14 days
+      // Amount must also match within 5% to confirm it's truly the same payment
+      const ctAmtUSD=toUSD(Math.abs(parseFloat(ct.amount)||0),ct.currency||baseCurrency);
+      const amtMatch=d.amount>0?Math.abs(d.amount-ctAmtUSD)/d.amount<0.05:ctAmtUSD<0.01;
+      return amtMatch;
     });
     if(hasManualCashNearby){
       divToRemove.add(idx);
-      if(d._key)cashToRemoveKeys.add(d._key); // also remove the matching auto cash entry
+      if(d._key)cashToRemoveKeys.add(d._key);
     }
   });
   dividends=dividends.filter(function(_,idx){return !divToRemove.has(idx);});
-  // Remove auto-added cash entries that share the same _key as removed dividend entries
   cashTxList=cashTxList.filter(function(ct){
     return !ct._key||!cashToRemoveKeys.has(ct._key);
   });
@@ -2274,11 +2298,11 @@ function deduplicateDividends(){
     if(!ct.symbol||!ct.date||!ct.amount)return;
     const amtUSD=toUSD(Math.abs(parseFloat(ct.amount)||0), ct.currency||baseCurrency);
     const ctTime=new Date(ct.date).getTime();
-    // Check if a dividends record already exists within 30 days with similar amount (20% tolerance)
+    // Check if a dividends record already exists within 14 days with similar amount (5% tolerance)
     const alreadyExists=dividends.some(function(d){
       if(d.ticker!==ct.symbol)return false;
       const daysDiff=Math.abs(new Date(d.date).getTime()-ctTime)/(1000*60*60*24);
-      return daysDiff<=30&&Math.abs(d.amount-amtUSD)<Math.max(amtUSD*0.2,0.5);
+      return daysDiff<=14&&Math.abs(d.amount-amtUSD)<Math.max(amtUSD*0.05,0.01);
     });
     if(!alreadyExists){
       const key='DIV_'+ct.symbol+'_'+ct.date+'_'+amtUSD.toFixed(4);

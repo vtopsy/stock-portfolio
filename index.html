@@ -1711,6 +1711,11 @@ async function refreshPrices(){
               const divKey='DIV_'+ticker+'_'+evDate+'_'+totalUSD.toFixed(4);
               // Skip if user previously deleted this auto entry
               if(deletedDivKeys.has(divKey))return;
+              // Skip if ex-date is before the first buy date for this ticker
+              const firstBuyDate=cashTxList.filter(function(ct){
+                return (ct.type||'').toUpperCase()==='BUY'&&normTicker(ct.symbol||'')===normTicker(ticker);
+              }).map(function(ct){return ct.date;}).sort()[0];
+              if(firstBuyDate&&evDate<firstBuyDate)return;
               // Skip if already exists in dividends (by exDate or date)
               if(dividends.some(function(d){return d.ticker===ticker&&(d.exDate===evDate||d.date===evDate);}))return;
               // Skip if exact ticker+date already exists in cash transactions

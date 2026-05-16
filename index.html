@@ -368,9 +368,9 @@ input[type=file]{display:none}
           <button class="tab-btn" onclick="settingsTab('fbGuide',this)">Setup guide</button>
         </div>
         <div id="fbConfig">
-          <div class="fg"><label>API Key</label><input id="fbApiKey" placeholder="AIza..." oninput="saveFirebaseConfig()"/></div>
-          <div class="fg"><label>Database URL</label><input id="fbDbUrl" placeholder="https://...firebaseio.com" oninput="saveFirebaseConfig()"/></div>
-          <div class="fg"><label>Private Key <span style="font-size:11px;color:var(--text3)">(secret path — keep safe)</span></label><input id="fbPrivateKey" placeholder="e.g. mySecretKey123" oninput="saveFirebaseConfig()" style="font-family:monospace"/></div>
+          <input id="fbApiKey" type="hidden"/>
+          <input id="fbDbUrl" type="hidden"/>
+          <div class="fg"><label>Private Key <span style="font-size:11px;color:var(--text3)">(secret path — keep safe)</span></label><input id="fbPrivateKey" placeholder="Enter your private key" oninput="saveFirebaseConfig()" onblur="if(firebaseConfig.privateKey)loadFromFirebase()" style="font-family:monospace"/></div>
           <div style="display:flex;gap:7px;margin-top:5px">
             <button class="btn btn-primary btn-sm" onclick="loadFromFirebase()">Load</button>
             <button class="btn btn-ghost btn-sm" onclick="saveToFirebase()">Save</button>
@@ -566,7 +566,7 @@ input[type=file]{display:none}
 // ===================== STATE =====================
 let transactions=[], cashTxList=[], dividends=[], watchlist=[], alerts=[];
 let holdingView='open', baseCurrency='SGD';
-let firebaseConfig={}, emailConfig={};  // firebaseConfig.privateKey = secret path segment
+let firebaseConfig={apiKey:'AIzaSyBwGdxrkdjEUY_HPglRxcYUtHUXG-4FK7E',databaseURL:'https://stock-portfolio-e1b69-default-rtdb.asia-southeast1.firebasedatabase.app'}, emailConfig={};
 let txPage=1, cashPage=1;
 const PER=20;
 let curTxAction='Buy', curEditAction='Buy', curCashAction='DEPOSIT';
@@ -839,21 +839,75 @@ function renderDivSummary(ym,years){
 }
 
 function switchChart(period,btn){
-  document.querySelectorAll('#chartPills .pill').forEach(p=>p.classList.remove('active'));btn.classList.add('active');
+  document.querySelectorAll('#chartPills .pill').forEach(p=>p.classList.remove('active'));
+  if(btn)btn.classList.add('active');
   if(!transactions.length){portfolioChart.data.labels=[];portfolioChart.data.datasets[0].data=[];portfolioChart.update();return;}
-  const now=new Date(),end=toBase(totalMV());
-  var sd,tc,lf;
-  if(period==='1M'){sd=new Date(now.getFullYear(),now.getMonth()-1,now.getDate());tc=30;lf=function(d){return d.toLocaleDateString('en',{month:'short',day:'numeric'});};}
-  else if(period==='6M'){sd=new Date(now.getFullYear(),now.getMonth()-6,now.getDate());tc=26;lf=function(d){return d.toLocaleDateString('en',{month:'short',day:'numeric'});};}
-  else if(period==='YTD'){sd=new Date(now.getFullYear(),0,1);tc=Math.max(now.getMonth()+1,2);lf=function(d){return d.toLocaleDateString('en',{month:'short'});};}
-  else if(period==='1Y'){sd=new Date(now.getFullYear()-1,now.getMonth(),now.getDate());tc=12;lf=function(d){return d.toLocaleDateString('en',{month:'short',year:'2-digit'});};}
-  else if(period==='5Y'){sd=new Date(now.getFullYear()-5,now.getMonth(),now.getDate());tc=20;lf=function(d){return d.toLocaleDateString('en',{month:'short',year:'numeric'});};}
-  else{var e=transactions.map(function(t){return new Date(t.date);}).filter(function(d){return !isNaN(d);}).sort(function(a,b){return a-b;})[0]||new Date(now.getFullYear()-2,0,1);sd=e;tc=24;lf=function(d){return d.toLocaleDateString('en',{month:'short',year:'numeric'});};}
-  const ms=now-sd,base=end*0.45;
-  const labels=Array.from({length:tc},function(_,i){return lf(new Date(sd.getTime()+ms*(i/(tc-1))));});
-  const data=labels.map(function(_,i){return Math.max(0,Math.round(base+(end-base)*Math.pow(i/(tc-1),0.82)+(Math.sin(i*3.9)*0.022*end)));});
-  data[data.length-1]=Math.round(end);
-  portfolioChart.data.labels=labels;portfolioChart.data.datasets[0].data=data;portfolioChart.update();
+
+  const now=new Date();
+  var sd;
+  if(period==='1M') sd=new Date(now.getFullYear(),now.getMonth()-1,now.getDate());
+  else if(period==='6M') sd=new Date(now.getFullYear(),now.getMonth()-6,now.getDate());
+  else if(period==='YTD') sd=new Date(now.getFullYear(),0,1);
+  else if(period==='1Y') sd=new Date(now.getFullYear()-1,now.getMonth(),now.getDate());
+  else if(period==='5Y') sd=new Date(now.getFullYear()-5,now.getMonth(),now.getDate());
+  else sd=transactions.map(function(t){return new Date(t.date);}).filter(function(d){return !isNaN(d);}).sort(function(a,b){return a-b;})[0]||new Date(now.getFullYear()-5,0,1);
+
+  // Build portfolio cost basis over time from transaction history
+  // Sort all buy/sell transactions chronologically
+  const txSorted=[...transactions].sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+
+  // Generate daily snapshots: for each date point compute cost basis
+  // We approximate portfolio value as cost basis (since we don't have daily prices)
+  // using total invested capital at each point in time
+  const sdTime=sd.getTime();
+  const nowTime=now.getTime();
+  const rangeMs=nowTime-sdTime;
+
+  // Determine tick count and label format based on period
+  var tc,lf;
+  if(period==='1M'){tc=30;lf=function(d){return d.toLocaleDateString('en',{month:'short',day:'numeric'});};}
+  else if(period==='6M'){tc=26;lf=function(d){return d.toLocaleDateString('en',{month:'short',day:'numeric'});};}
+  else if(period==='YTD'){tc=Math.max(now.getMonth()+1,2);lf=function(d){return d.toLocaleDateString('en',{month:'short'});};}
+  else if(period==='1Y'){tc=12;lf=function(d){return d.toLocaleDateString('en',{month:'short',year:'2-digit'});};}
+  else if(period==='5Y'){tc=20;lf=function(d){return d.toLocaleDateString('en',{month:'short',year:'numeric'});};}
+  else{tc=Math.min(txSorted.length+1,30);lf=function(d){return d.toLocaleDateString('en',{month:'short',year:'numeric'});};}
+
+  // For each tick point, compute cumulative cost basis up to that date
+  const tickDates=Array.from({length:tc},function(_,i){
+    return new Date(sdTime+rangeMs*(i/(tc-1)));
+  });
+
+  // Running cost basis from transactions
+  var runCost=0;
+  var txIdx=0;
+  var txByDate=txSorted.map(function(t){return {date:new Date(t.date),cost:toBase(toUSD(t.totalAfterFees||((t.shares||0)*(t.price||0)),t.currency||'USD')),action:t.action};});
+
+  const data=tickDates.map(function(tickDate){
+    // Add all transactions up to this tick date
+    while(txIdx<txByDate.length&&txByDate[txIdx].date<=tickDate){
+      var tx=txByDate[txIdx];
+      if(tx.action==='Buy') runCost+=tx.cost;
+      else if(tx.action==='Sell') runCost=Math.max(0,runCost-tx.cost);
+      txIdx++;
+    }
+    return Math.round(runCost);
+  });
+
+  // Scale last point to current portfolio value so chart ends at current MV
+  const currentMV=toBase(totalMV());
+  const lastCost=data[data.length-1]||1;
+  const scaleFactor=lastCost>0?currentMV/lastCost:1;
+  const scaledData=data.map(function(v,i){
+    // Apply scale factor gradually so chart ends at current MV
+    const weight=i/(data.length-1);
+    return Math.round(v*(1-weight*0.3)+v*scaleFactor*weight*0.3+v*(1-weight));
+  });
+  scaledData[scaledData.length-1]=Math.round(currentMV);
+
+  const labels=tickDates.map(function(d){return lf(d);});
+  portfolioChart.data.labels=labels;
+  portfolioChart.data.datasets[0].data=scaledData;
+  portfolioChart.update();
 }
 
 // ===================== RENDERS =====================
@@ -1210,7 +1264,7 @@ function renderDivYearlyTable(){
     if(!ym[y])ym[y]={total:0};
     ym[y].total+=d.amountUSD;
   });
-  const years=Object.keys(ym).sort();
+  const years=Object.keys(ym).sort().reverse();
   const grandTotal=years.reduce(function(s,y){return s+ym[y].total;},0);
   const totalMonths=years.reduce(function(s,y,i){
     if(i<years.length-1)return s+12;
@@ -1969,11 +2023,10 @@ function exportCashCSV(){
 
 // ===================== FIREBASE =====================
 function saveFirebaseConfig(){
-  const url=document.getElementById('fbDbUrl').value.trim();
-  const key=document.getElementById('fbApiKey').value.trim();
   const pk=(document.getElementById('fbPrivateKey').value||'').trim();
-  firebaseConfig={apiKey:key,databaseURL:url,privateKey:pk||undefined};
-  try{localStorage.setItem('piq_fb',JSON.stringify(firebaseConfig));}catch(e){}
+  // API key and DB URL are hardcoded — only private key needs to be set
+  firebaseConfig.privateKey=pk||undefined;
+  try{localStorage.setItem('piq_fb',JSON.stringify({privateKey:pk}));}catch(e){}
   document.getElementById('fbStatus').textContent=url?'Config saved — click Load to fetch data':'Enter Database URL';
 }
 function getFirebaseUrl(path){
@@ -2060,6 +2113,11 @@ function clearAllData(){if(!confirm('Clear ALL data?'))return;transactions=[];ca
 // ===================== RENDER ALL =====================
 function renderCash(){renderCashBalances();renderCashTx();}
 function renderAll(){
+  // Default chart to 1M after data loads
+  setTimeout(function(){
+    const btn=document.querySelector('#chartPills .pill');
+    if(btn) switchChart('1M',btn);
+  },100);
   renderMetrics();renderDashCurrency();renderUpcomingDivs();
   renderTransactions();renderHoldings();renderCash();
   renderDivHistory();renderDivYearlyTable();renderDripSim();
@@ -2070,7 +2128,13 @@ function renderAll(){
 
 // ===================== INIT =====================
 document.querySelectorAll('.modal-bg').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('open');});});
-try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){document.getElementById('fbApiKey').value=fb.apiKey||'';document.getElementById('fbDbUrl').value=fb.databaseURL||'';if(fb.privateKey)document.getElementById('fbPrivateKey').value=fb.privateKey;firebaseConfig=fb;}}catch(e){}
+try{
+  const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');
+  if(fb.privateKey){
+    firebaseConfig.privateKey=fb.privateKey;
+    document.getElementById('fbPrivateKey').value=fb.privateKey;
+  }
+}catch(e){}
 try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
 try{const ov=localStorage.getItem('piq_divOverrides');if(ov){const parsed=JSON.parse(ov);if(parsed&&typeof parsed==='object')Object.assign(divOverrides,parsed);}}catch(e){}

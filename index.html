@@ -370,6 +370,7 @@ input[type=file]{display:none}
         <div id="fbConfig">
           <div class="fg"><label>API Key</label><input id="fbApiKey" placeholder="AIza..." oninput="saveFirebaseConfig()"/></div>
           <div class="fg"><label>Database URL</label><input id="fbDbUrl" placeholder="https://...firebaseio.com" oninput="saveFirebaseConfig()"/></div>
+          <div class="fg"><label>Private Key <span style="font-size:11px;color:var(--text3)">(secret path — keep safe)</span></label><input id="fbPrivateKey" placeholder="e.g. mySecretKey123" oninput="saveFirebaseConfig()" style="font-family:monospace"/></div>
           <div style="display:flex;gap:7px;margin-top:5px">
             <button class="btn btn-primary btn-sm" onclick="loadFromFirebase()">Load</button>
             <button class="btn btn-ghost btn-sm" onclick="saveToFirebase()">Save</button>
@@ -565,7 +566,7 @@ input[type=file]{display:none}
 // ===================== STATE =====================
 let transactions=[], cashTxList=[], dividends=[], watchlist=[], alerts=[];
 let holdingView='open', baseCurrency='SGD';
-let firebaseConfig={}, emailConfig={};
+let firebaseConfig={}, emailConfig={};  // firebaseConfig.privateKey = secret path segment
 let txPage=1, cashPage=1;
 const PER=20;
 let curTxAction='Buy', curEditAction='Buy', curCashAction='DEPOSIT';
@@ -1970,13 +1971,16 @@ function exportCashCSV(){
 function saveFirebaseConfig(){
   const url=document.getElementById('fbDbUrl').value.trim();
   const key=document.getElementById('fbApiKey').value.trim();
-  firebaseConfig={apiKey:key,databaseURL:url};
+  const pk=(document.getElementById('fbPrivateKey').value||'').trim();
+  firebaseConfig={apiKey:key,databaseURL:url,privateKey:pk||undefined};
   try{localStorage.setItem('piq_fb',JSON.stringify(firebaseConfig));}catch(e){}
   document.getElementById('fbStatus').textContent=url?'Config saved — click Load to fetch data':'Enter Database URL';
 }
 function getFirebaseUrl(path){
   const base=firebaseConfig.databaseURL.replace(/\/$/,'');
-  return base+'/'+path;
+  // Use private key as path segment so data isn't at a guessable public path
+  const pk=firebaseConfig.privateKey?'users/'+firebaseConfig.privateKey+'/':'';
+  return base+'/'+pk+path;
 }
 async function saveToFirebase(){
   if(!firebaseConfig.databaseURL)return;
@@ -2066,7 +2070,7 @@ function renderAll(){
 
 // ===================== INIT =====================
 document.querySelectorAll('.modal-bg').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('open');});});
-try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){document.getElementById('fbApiKey').value=fb.apiKey||'';document.getElementById('fbDbUrl').value=fb.databaseURL||'';firebaseConfig=fb;}}catch(e){}
+try{const fb=JSON.parse(localStorage.getItem('piq_fb')||'{}');if(fb.apiKey){document.getElementById('fbApiKey').value=fb.apiKey||'';document.getElementById('fbDbUrl').value=fb.databaseURL||'';if(fb.privateKey)document.getElementById('fbPrivateKey').value=fb.privateKey;firebaseConfig=fb;}}catch(e){}
 try{const ej=JSON.parse(localStorage.getItem('piq_email')||'{}');if(ej.publicKey){['ejPublicKey','ejServiceId','ejTemplateId','ejEmail'].forEach(function(id,i){const k=['publicKey','serviceId','templateId','email'][i];const el=document.getElementById(id);if(el&&ej[k])el.value=ej[k];});emailConfig=ej;}}catch(e){}
 try{const cur=localStorage.getItem('piq_currency');if(cur){baseCurrency=cur;document.getElementById('baseCurrencySel').value=cur;}}catch(e){}
 try{const ov=localStorage.getItem('piq_divOverrides');if(ov){const parsed=JSON.parse(ov);if(parsed&&typeof parsed==='object')Object.assign(divOverrides,parsed);}}catch(e){}

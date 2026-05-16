@@ -1747,6 +1747,45 @@ async function refreshPrices(){
             }
           }
 
+          // ── Fallback pay date fetch for stocks where Yahoo meta.dividendDate is missing ──
+          // If pendingDividends entry for this ticker still has payDate === exDate, try alternate sources
+          if(h){
+            const pendIdx=pendingDividends.findIndex(function(p){
+              return p.ticker===ticker&&p.payDate&&p.payDate===p.exDate;
+            });
+            if(pendIdx>=0){
+              const pend=pendingDividends[pendIdx];
+              // US stocks: try NASDAQ API for dividend pay date
+              if(h.exchange==='USX'||h.exchange==='NASDAQ'||h.exchange==='NYSE'){
+                try{
+                  const nasdaqUrl='https://api.nasdaq.com/api/quote/'+ticker+'/dividends?assetClass=stocks';
+                  const nr=await fetch('https://corsproxy.io/?'+encodeURIComponent(nasdaqUrl),{headers:{'User-Agent':'Mozilla/5.0'}});
+                  if(nr.ok){
+                    const nd=await nr.json();
+                    const rows=(nd&&nd.data&&nd.data.dividends&&nd.data.dividends.rows)||[];
+                    // Find row matching our ex-date
+                    const match=rows.find(function(r){
+                      return r.exOrEffDate&&r.exOrEffDate.trim()===new Date(pend.exDate).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'});
+                    });
+                    if(match&&match.paymentDate&&match.paymentDate.trim()!=='N/A'){
+                      const pd=new Date(match.paymentDate.trim());
+                      if(!isNaN(pd)){
+                        const pdStr=pd.toISOString().split('T')[0];
+                        pendingDividends[pendIdx].payDate=pdStr;
+                      }
+                    }
+                  }
+                }catch(e){}
+              }
+              // HK stocks: estimate pay date as ex-date + 42 days (typical HKEX cycle)
+              if(h.exchange==='HKEX'&&pendingDividends[pendIdx].payDate===pend.exDate){
+                const exMs=new Date(pend.exDate).getTime();
+                const estimatedPay=new Date(exMs+42*86400000).toISOString().split('T')[0];
+                pendingDividends[pendIdx].payDate=estimatedPay;
+              }
+            }
+          }
+
           // ── Process dividend events ──
           const divEvents=result.events&&result.events.dividends;
           if(divEvents&&h){
